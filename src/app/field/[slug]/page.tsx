@@ -177,6 +177,7 @@ export default function FieldPage() {
     if (!currentTrack) return;
     console.log("[audio] creating audio, url:", currentTrack.file_url?.slice(0, 60));
     const audio = new Audio(currentTrack.file_url);
+    audio.crossOrigin = "anonymous";
     audio.muted = false;
     audio.volume = 1;
     audio.preload = "auto";
@@ -218,10 +219,10 @@ export default function FieldPage() {
   const syncState = async (partial: Record<string, unknown>) => {
     if (!room) return;
     const supabase = getClient();
-    const { error } = await supabase
+    const { error, status, statusText } = await supabase
       .from("room_state")
       .upsert({ room_id: room.id, ...partial }, { onConflict: "room_id" });
-    if (error) console.error("[syncState] upsert error:", error);
+    if (error) console.error("[syncState] upsert error:", error, { status, statusText, partial });
   };
 
   const handlePlayPause = async () => {
