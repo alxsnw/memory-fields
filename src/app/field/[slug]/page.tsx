@@ -65,6 +65,8 @@ export default function FieldPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
 
   const currentTrack = tracks.find((t) => t.id === roomState?.current_track_id) || null;
   const sortedTracks = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
@@ -149,38 +151,66 @@ export default function FieldPage() {
     return () => clearInterval(interval);
   }, [isPlaying]);
 
+  function setupAudioGraph(audio: HTMLAudioElement) {
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+
+    const source = ctx.createMediaElementSource(audio);
+    source.connect(analyser);
+    analyser.connect(gain);
+    gain.connect(ctx.destination);
+
+    sourceRef.current = source;
+    gainRef.current = gain;
+    audioCtxRef.current = ctx;
+    analyserRef.current = analyser;
+
+    console.log("[audiocontext] graph: audio -> source -> analyser -> gain(1) -> destination, state:", ctx.state);
+  }
+
   useEffect(() => {
     if (!currentTrack) return;
     console.log("[audio] creating audio, url:", currentTrack.file_url?.slice(0, 60));
     const audio = new Audio(currentTrack.file_url);
+    audio.muted = false;
     audio.volume = 1;
     audio.preload = "auto";
     audioRef.current = audio;
+
     audio.addEventListener("loadedmetadata", () => {
       console.log("[audio] loadedmetadata, duration:", audio.duration);
       setDuration(audio.duration);
     });
-    audio.addEventListener("error", (e) => {
-      console.error("[audio] error:", audio.error?.code, audio.error?.message, e);
+    audio.addEventListener("error", () => {
+      console.error("[audio] error code:", audio.error?.code, audio.error?.message);
     });
-    audio.addEventListener("canplay", () => console.log("[audio] canplay"));
-    audio.addEventListener("ended", () => { setIsPlaying(false); syncState({ is_playing: false, current_time: 0 }); });
-    return () => { audio.pause(); audio.src = ""; };
-  }, [currentTrack?.id]);
+    audio.addEventListener("canplay", () => {
+      if (sourceRef.current) {
+        console.log("[audio] canplay (skip, graph already exists)");
+        return;
+      }
+      console.log("[audio] canplay, setting up graph");
+      setupAudioGraph(audio);
+    });
+    audio.addEventListener("ended", () => {
+      setIsPlaying(false);
+      syncState({ is_playing: false, current_time: 0 });
+    });
 
-  useEffect(() => {
-    if (!audioRef.current || !currentTrack) return;
-    console.log("[audiocontext] creating context");
-    const ctx = new AudioContext();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    const source = ctx.createMediaElementSource(audioRef.current);
-    source.connect(analyser);
-    analyser.connect(ctx.destination);
-    audioCtxRef.current = ctx;
-    analyserRef.current = analyser;
-    console.log("[audiocontext] created, state:", ctx.state);
-    return () => { console.log("[audiocontext] closing"); ctx.close(); };
+    return () => {
+      audio.pause();
+      audio.src = "";
+      sourceRef.current = null;
+      gainRef.current = null;
+      analyserRef.current = null;
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+    };
   }, [currentTrack?.id]);
 
   const syncState = async (partial: Record<string, unknown>) => {
@@ -195,25 +225,44 @@ export default function FieldPage() {
       audioRef.current.pause();
       setIsPlaying(false);
       syncState({ is_playing: false, paused_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
-    } else {
-      console.log("[play] AudioContext state:", audioCtxRef.current?.state);
-      console.log("[play] audio src:", audioRef.current.src?.slice(0, 60));
-      console.log("[play] audio readyState:", audioRef.current.readyState);
-      if (audioCtxRef.current?.state === "suspended") {
-        console.log("[play] resuming AudioContext");
-        await audioCtxRef.current.resume();
-        console.log("[play] AudioContext state after resume:", audioCtxRef.current?.state);
-      }
-      try {
-        await audioRef.current.play();
-        console.log("[play] play() succeeded");
-      } catch (err) {
-        console.error("[play] play() failed:", err);
-        alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
-      }
-      setIsPlaying(true);
-      syncState({ is_playing: true, started_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
+      return;
     }
+
+    const el = audioRef.current;
+    const ctx = audioCtxRef.current;
+
+    console.log("[play] debug:", {
+      audioCtxState: ctx?.state,
+      audioSrc: el.src?.slice(0, 60),
+      audioPaused: el.paused,
+      audioCurrentTime: el.currentTime,
+      audioReadyState: el.readyState,
+      audioMuted: el.muted,
+      audioVolume: el.volume,
+      gainValue: gainRef.current?.gain?.value,
+      sourceExists: !!sourceRef.current,
+    });
+
+    if (ctx?.state === "suspended") {
+      console.log("[play] resuming AudioContext");
+      try { await ctx.resume(); } catch (e) {
+        console.error("[play] resume failed:", e);
+        alert("Audio context resume failed: " + (e instanceof Error ? e.message : String(e)));
+        return;
+      }
+    }
+
+    try {
+      await el.play();
+      console.log("[play] play() succeeded, ctx state:", ctx?.state);
+    } catch (err) {
+      console.error("[play] play() failed:", err);
+      alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
+      return;
+    }
+
+    setIsPlaying(true);
+    syncState({ is_playing: true, started_at: new Date().toISOString(), current_time: el.currentTime });
   };
 
   const handleSeek = (time: number) => {
