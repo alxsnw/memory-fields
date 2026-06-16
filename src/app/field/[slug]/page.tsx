@@ -151,16 +151,26 @@ export default function FieldPage() {
 
   useEffect(() => {
     if (!currentTrack) return;
+    console.log("[audio] creating audio, url:", currentTrack.file_url?.slice(0, 60));
     const audio = new Audio(currentTrack.file_url);
+    audio.volume = 1;
     audio.preload = "auto";
     audioRef.current = audio;
-    audio.addEventListener("loadedmetadata", () => setDuration(audio.duration));
+    audio.addEventListener("loadedmetadata", () => {
+      console.log("[audio] loadedmetadata, duration:", audio.duration);
+      setDuration(audio.duration);
+    });
+    audio.addEventListener("error", (e) => {
+      console.error("[audio] error:", audio.error?.code, audio.error?.message, e);
+    });
+    audio.addEventListener("canplay", () => console.log("[audio] canplay"));
     audio.addEventListener("ended", () => { setIsPlaying(false); syncState({ is_playing: false, current_time: 0 }); });
     return () => { audio.pause(); audio.src = ""; };
   }, [currentTrack?.id]);
 
   useEffect(() => {
     if (!audioRef.current || !currentTrack) return;
+    console.log("[audiocontext] creating context");
     const ctx = new AudioContext();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
@@ -169,7 +179,8 @@ export default function FieldPage() {
     analyser.connect(ctx.destination);
     audioCtxRef.current = ctx;
     analyserRef.current = analyser;
-    return () => { ctx.close(); };
+    console.log("[audiocontext] created, state:", ctx.state);
+    return () => { console.log("[audiocontext] closing"); ctx.close(); };
   }, [currentTrack?.id]);
 
   const syncState = async (partial: Record<string, unknown>) => {
@@ -185,10 +196,21 @@ export default function FieldPage() {
       setIsPlaying(false);
       syncState({ is_playing: false, paused_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
     } else {
+      console.log("[play] AudioContext state:", audioCtxRef.current?.state);
+      console.log("[play] audio src:", audioRef.current.src?.slice(0, 60));
+      console.log("[play] audio readyState:", audioRef.current.readyState);
       if (audioCtxRef.current?.state === "suspended") {
+        console.log("[play] resuming AudioContext");
         await audioCtxRef.current.resume();
+        console.log("[play] AudioContext state after resume:", audioCtxRef.current?.state);
       }
-      await audioRef.current.play();
+      try {
+        await audioRef.current.play();
+        console.log("[play] play() succeeded");
+      } catch (err) {
+        console.error("[play] play() failed:", err);
+        alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
+      }
       setIsPlaying(true);
       syncState({ is_playing: true, started_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
     }
