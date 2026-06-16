@@ -220,8 +220,8 @@ export default function FieldPage() {
       const progressInterval = setInterval(() => setUploadProgress((prev) => Math.min(prev + 15, 85)), 500);
       const { error: uploadError } = await supabase.storage.from("audio").upload(filePath, file);
       clearInterval(progressInterval);
-      setUploadProgress(100);
       if (uploadError) throw uploadError;
+      setUploadProgress(100);
 
       const { data: urlData } = supabase.storage.from("audio").getPublicUrl(filePath);
       const fileUrl = urlData?.publicUrl || "";
@@ -234,7 +234,10 @@ export default function FieldPage() {
 
       if (trackError) throw trackError;
       if (tracks.length === 0 && track) syncState({ current_track_id: track.id });
-    } catch (err) { console.error("Upload error:", err); }
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Upload failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
     finally { setUploading(false); }
   };
 
