@@ -114,7 +114,7 @@ export function TransportBar({
           </>
         ) : (
           <div className="text-[13px] leading-4 font-medium text-frost/40 text-center">
-            No track loaded
+            Waiting for signal
           </div>
         )}
       </div>
@@ -130,8 +130,8 @@ export function TransportBar({
       </div>
 
       {/* Sync Status */}
-      <div className={cn("w-[72px] shrink-0 text-center font-mono text-[9px] leading-3 uppercase tracking-[0.06em]", syncColors[syncStatus])}>
-        {syncStatus}
+      <div className={cn("shrink-0 text-center font-mono text-[9px] leading-3 uppercase tracking-[0.06em]", currentTrack ? syncColors[syncStatus] : "text-frost/32")}>
+        {currentTrack ? syncStatus : "IDLE / WAITING FOR SIGNAL"}
       </div>
     </div>
   );

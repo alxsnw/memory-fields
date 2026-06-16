@@ -31,10 +31,10 @@ export function MemoryArchive({ tracks, currentTrackId, isPlaying, isHost, onSel
         {tracks.length === 0 ? (
           <div className="text-center py-12">
             <p className="font-mono text-[10px] text-subtle uppercase tracking-[0.08em]">
-              No tracks yet
+              No memories yet
             </p>
             <p className="font-mono text-[10px] text-subtle mt-1">
-              Upload audio to begin
+              Saved sessions will appear here
             </p>
           </div>
         ) : (

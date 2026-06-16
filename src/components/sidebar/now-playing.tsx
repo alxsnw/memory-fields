@@ -59,13 +59,13 @@ export default function NowPlaying({ track, currentTime, isPlaying, scrollToTrac
             className="text-frost"
             style={{ fontFamily: "Inter, system-ui, -apple-system, sans-serif", fontSize: 13, lineHeight: "16px", fontWeight: 400 }}
           >
-            No active track
+            No signal loaded
           </p>
           <p
             className="text-frost/46"
             style={{ fontFamily: '"IBM Plex Mono", "SF Mono", "Roboto Mono", monospace', fontSize: 11, lineHeight: "14px", fontWeight: 400 }}
           >
-            Upload audio to create a field
+            Upload audio to activate the field
           </p>
         </div>
       )}
