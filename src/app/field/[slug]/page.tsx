@@ -58,6 +58,7 @@ export default function FieldPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [showBypass, setShowBypass] = useState(false);
 
   const [visualModel, setVisualModel] = useState<VisualModel>("signal-field");
   const [paletteMode, setPaletteMode] = useState<PaletteMode>("mineral");
@@ -217,7 +218,10 @@ export default function FieldPage() {
   const syncState = async (partial: Record<string, unknown>) => {
     if (!room) return;
     const supabase = getClient();
-    await supabase.from("room_state").update(partial).eq("room_id", room.id);
+    const { error } = await supabase
+      .from("room_state")
+      .upsert({ room_id: room.id, ...partial }, { onConflict: "room_id" });
+    if (error) console.error("[syncState] upsert error:", error);
   };
 
   const handlePlayPause = async () => {
@@ -231,17 +235,18 @@ export default function FieldPage() {
 
     const el = audioRef.current;
     const ctx = audioCtxRef.current;
+    const gain = gainRef.current;
 
-    console.log("[play] debug:", {
-      audioCtxState: ctx?.state,
-      audioSrc: el.src?.slice(0, 60),
-      audioPaused: el.paused,
-      audioCurrentTime: el.currentTime,
-      audioReadyState: el.readyState,
-      audioMuted: el.muted,
-      audioVolume: el.volume,
-      gainValue: gainRef.current?.gain?.value,
-      sourceExists: !!sourceRef.current,
+    console.log("[play] before:", {
+      ctxState: ctx?.state,
+      paused: el.paused,
+      currentTime: el.currentTime,
+      readyState: el.readyState,
+      muted: el.muted,
+      volume: el.volume,
+      src: el.src?.slice(0, 60),
+      gain: gain?.gain?.value,
+      hasSource: !!sourceRef.current,
     });
 
     if (ctx?.state === "suspended") {
@@ -255,7 +260,25 @@ export default function FieldPage() {
 
     try {
       await el.play();
-      console.log("[play] play() succeeded, ctx state:", ctx?.state);
+      console.log("[play] after immediate:", {
+        ctxState: ctx?.state,
+        paused: el.paused,
+        currentTime: el.currentTime,
+        muted: el.muted,
+        volume: el.volume,
+        gain: gain?.gain?.value,
+      });
+      setTimeout(() => {
+        console.log("[play] after 300ms:", {
+          ctxState: ctx?.state,
+          paused: el.paused,
+          currentTime: el.currentTime,
+          readyState: el.readyState,
+          muted: el.muted,
+          volume: el.volume,
+          gain: gain?.gain?.value,
+        });
+      }, 300);
     } catch (err) {
       console.error("[play] play() failed:", err);
       alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -279,7 +302,10 @@ export default function FieldPage() {
     setIsPlaying(false);
     setCurrentTime(0);
     const supabase = getClient();
-    await supabase.from("room_state").update({ current_track_id: track.id, is_playing: false, current_time: 0 }).eq("room_id", room.id);
+    await supabase.from("room_state").upsert(
+      { room_id: room.id, current_track_id: track.id, is_playing: false, current_time: 0 },
+      { onConflict: "room_id" },
+    );
     await supabase.from("tracks").update({ last_played_at: new Date().toISOString() }).eq("id", track.id);
   };
 
@@ -452,6 +478,21 @@ export default function FieldPage() {
         onPrevious={() => prevTrack && handleSelectTrack(prevTrack)}
         onNext={() => nextTrack && handleSelectTrack(nextTrack)}
         previousTrack={prevTrack} nextTrack={nextTrack} />
+
+      {/* Debug: bypass native audio player */}
+      {currentTrack && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">
+          <button
+            onClick={() => setShowBypass((v) => !v)}
+            className="font-mono text-[9px] uppercase tracking-wider text-frost/30 hover:text-frost/60 mb-1"
+          >
+            {showBypass ? "Hide" : "Debug"} audio
+          </button>
+          {showBypass && (
+            <audio controls src={currentTrack.file_url} className="w-[400px] h-10" />
+          )}
+        </div>
+      )}
     </>
   );
 }
