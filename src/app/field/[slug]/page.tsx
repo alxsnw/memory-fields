@@ -7,14 +7,16 @@ import { v4 as uuid } from "uuid";
 import { supabase as getSupabase } from "@/lib/supabase";
 import { getSavedName, saveName } from "@/lib/name-store";
 import { cn } from "@/lib/utils";
-import type { Room, Track, RoomState, ConnectedClient, VisualModel, PaletteMode, VisualParams, SyncStatus } from "@/types";
+import type { Room, Track, RoomState, ConnectedClient, SyncStatus } from "@/types";
+import type { InterpolatedState } from "@/lib/visual-journey";
+import { createJourney, tickJourney, getInterpolatedState, updateJourneyPlayState } from "@/lib/visual-journey";
+import { getPreset } from "@/lib/presets";
 
 import Brand from "@/components/sidebar/brand";
 import UploadCapsule from "@/components/sidebar/upload-capsule";
 import NowPlaying from "@/components/sidebar/now-playing";
 import { MemoryArchive } from "@/components/archive/memory-archive";
 import { TransportBar } from "@/components/transport/transport-bar";
-import { FieldControls } from "@/components/sidebar/field-controls";
 import { CanvasVisualizer } from "@/components/visualizer/canvas-visualizer";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,16 +24,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
-const defaultVisualParams: VisualParams = {
-  intensity: 50, density: 50, speed: 50, memory: 50, detail: 50, glow: 40,
-  randomness: 30, smoothing: true, smoothingAmount: 50, coreSize: 42,
-  expansion: 50, edgeReactivity: 65, centerBias: 72, bloom: 20, grain: 0,
-  grainIntensity: 30, grainSize: 50, chromatic: 0, scanlines: 0,
-  vignette: 20, crtCurve: 0, phosphor: 0,
-};
-
 function getClient() {
   return getSupabase();
+}
+
+function getRoomSeed(slug: string): number {
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) {
+    hash = ((hash << 5) - hash) + slug.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
 export default function FieldPage() {
@@ -59,16 +62,17 @@ export default function FieldPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [showBypass, setShowBypass] = useState(false);
-
-  const [visualModel, setVisualModel] = useState<VisualModel>("signal-field");
-  const [paletteMode, setPaletteMode] = useState<PaletteMode>("mineral");
-  const [visualParams, setVisualParams] = useState<VisualParams>(defaultVisualParams);
+  const [showDebug, setShowDebug] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+
+  const roomSeed = useRef(getRoomSeed(slug));
+  const [journey, setJourney] = useState(() => createJourney(roomSeed.current, false));
+  const [interpolatedState, setInterpolatedState] = useState<InterpolatedState>(() => getInterpolatedState(journey));
 
   const currentTrack = tracks.find((t) => t.id === roomState?.current_track_id) || null;
   const sortedTracks = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
@@ -77,6 +81,31 @@ export default function FieldPage() {
   const nextTrack = currentIndex < sortedTracks.length - 1 ? sortedTracks[currentIndex + 1] : null;
 
   useEffect(() => { setMounted(true); loadRoom(); }, []);
+
+  // Journey ticker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setJourney((prev) => {
+        const updated = tickJourney(prev);
+        if (updated !== prev) {
+          setInterpolatedState(getInterpolatedState(updated));
+        }
+        return updated;
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync journey with play state
+  useEffect(() => {
+    setJourney((prev) => {
+      const updated = updateJourneyPlayState(prev, isPlaying);
+      if (updated !== prev) {
+        setInterpolatedState(getInterpolatedState(updated));
+      }
+      return updated;
+    });
+  }, [isPlaying]);
 
   const loadRoom = async () => {
     const supabase = getClient();
@@ -98,11 +127,6 @@ export default function FieldPage() {
       .from("room_state").select("*").eq("room_id", roomData.id).single() as { data: RoomState | null };
     if (stateData) {
       setRoomState(stateData);
-      setVisualModel(stateData.visual_model as VisualModel);
-      setPaletteMode(stateData.palette_mode as PaletteMode);
-      if (stateData.visual_params) {
-        setVisualParams((prev) => ({ ...prev, ...stateData.visual_params as Partial<VisualParams> }));
-      }
     }
 
     const { data: clientData } = await supabase
@@ -135,11 +159,6 @@ export default function FieldPage() {
         const state = payload.new as RoomState;
         setRoomState(state);
         setIsPlaying(state.is_playing);
-        setVisualModel(state.visual_model as VisualModel);
-        setPaletteMode(state.palette_mode as PaletteMode);
-        if (state.visual_params) {
-          setVisualParams((prev) => ({ ...prev, ...state.visual_params as Partial<VisualParams> }));
-        }
       },
     );
 
@@ -175,7 +194,6 @@ export default function FieldPage() {
 
   useEffect(() => {
     if (!currentTrack) return;
-    console.log("[audio] creating audio, url:", currentTrack.file_url?.slice(0, 60));
     const audio = new Audio(currentTrack.file_url);
     audio.crossOrigin = "anonymous";
     audio.muted = false;
@@ -184,18 +202,13 @@ export default function FieldPage() {
     audioRef.current = audio;
 
     audio.addEventListener("loadedmetadata", () => {
-      console.log("[audio] loadedmetadata, duration:", audio.duration);
       setDuration(audio.duration);
     });
     audio.addEventListener("error", () => {
       console.error("[audio] error code:", audio.error?.code, audio.error?.message);
     });
     audio.addEventListener("canplay", () => {
-      if (sourceRef.current) {
-        console.log("[audio] canplay (skip, graph already exists)");
-        return;
-      }
-      console.log("[audio] canplay, setting up graph");
+      if (sourceRef.current) return;
       setupAudioGraph(audio);
     });
     audio.addEventListener("ended", () => {
@@ -236,22 +249,8 @@ export default function FieldPage() {
 
     const el = audioRef.current;
     const ctx = audioCtxRef.current;
-    const gain = gainRef.current;
-
-    console.log("[play] before:", {
-      ctxState: ctx?.state,
-      paused: el.paused,
-      currentTime: el.currentTime,
-      readyState: el.readyState,
-      muted: el.muted,
-      volume: el.volume,
-      src: el.src?.slice(0, 60),
-      gain: gain?.gain?.value,
-      hasSource: !!sourceRef.current,
-    });
 
     if (ctx?.state === "suspended") {
-      console.log("[play] resuming AudioContext");
       try { await ctx.resume(); } catch (e) {
         console.error("[play] resume failed:", e);
         alert("Audio context resume failed: " + (e instanceof Error ? e.message : String(e)));
@@ -261,25 +260,6 @@ export default function FieldPage() {
 
     try {
       await el.play();
-      console.log("[play] after immediate:", {
-        ctxState: ctx?.state,
-        paused: el.paused,
-        currentTime: el.currentTime,
-        muted: el.muted,
-        volume: el.volume,
-        gain: gain?.gain?.value,
-      });
-      setTimeout(() => {
-        console.log("[play] after 300ms:", {
-          ctxState: ctx?.state,
-          paused: el.paused,
-          currentTime: el.currentTime,
-          readyState: el.readyState,
-          muted: el.muted,
-          volume: el.volume,
-          gain: gain?.gain?.value,
-        });
-      }, 300);
     } catch (err) {
       console.error("[play] play() failed:", err);
       alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -343,53 +323,6 @@ export default function FieldPage() {
     finally { setUploading(false); }
   };
 
-  const handleModelChange = async (model: VisualModel) => {
-    setVisualModel(model);
-    if (isHost && room) {
-      const supabase = getClient();
-      await supabase.from("room_state").update({ visual_model: model }).eq("room_id", room.id);
-    }
-  };
-
-  const handlePaletteChange = async (mode: PaletteMode) => {
-    setPaletteMode(mode);
-    if (isHost && room) {
-      const supabase = getClient();
-      await supabase.from("room_state").update({ palette_mode: mode }).eq("room_id", room.id);
-    }
-  };
-
-  const handleParamChange = async (params: Partial<VisualParams>) => {
-    const updated = { ...visualParams, ...params };
-    setVisualParams(updated);
-    if (isHost && room) {
-      const supabase = getClient();
-      await supabase.from("room_state").update({ visual_params: updated }).eq("room_id", room.id);
-    }
-  };
-
-  const handleMutate = async () => {
-    const models: VisualModel[] = ["signal-field", "spatial-rhythm", "particle-memory", "topographic-wave", "orbital-spectrum", "spectral-grid", "ascii-field"];
-    const newModel = models[Math.floor(Math.random() * models.length)];
-    const mutatedParams = {
-      ...visualParams,
-      randomness: Math.min(100, Math.max(0, visualParams.randomness + (Math.random() - 0.5) * 30)),
-      intensity: Math.min(100, Math.max(0, visualParams.intensity + (Math.random() - 0.5) * 20)),
-      density: Math.min(100, Math.max(0, visualParams.density + (Math.random() - 0.5) * 20)),
-      speed: Math.min(100, Math.max(0, visualParams.speed + (Math.random() - 0.5) * 15)),
-      memory: Math.min(100, Math.max(0, visualParams.memory + (Math.random() - 0.5) * 15)),
-      expansion: Math.min(100, Math.max(0, visualParams.expansion + (Math.random() - 0.5) * 15)),
-    };
-    setVisualModel(newModel);
-    setVisualParams(mutatedParams);
-    if (isHost && room) {
-      const supabase = getClient();
-      await supabase.from("room_state").update({
-        visual_model: newModel, visual_seed: Math.floor(Math.random() * 9999), visual_params: mutatedParams,
-      }).eq("room_id", room.id);
-    }
-  };
-
   const handleExport = (format: "png" | "jpeg") => {
     const canvas = document.querySelector("canvas");
     if (!canvas) return;
@@ -418,14 +351,18 @@ export default function FieldPage() {
     return <main className="min-h-screen flex items-center justify-center"><div className="text-subtle font-mono text-[11px]">Loading field...</div></main>;
   }
 
+  const currentPreset = getPreset(journey.startPreset);
+  const targetPreset = getPreset(journey.targetPreset);
+  const journeyProgress = journey.transitionDuration > 0
+    ? Math.min(100, ((Date.now() - journey.startTime) / journey.transitionDuration) * 100)
+    : 0;
+
   return (
     <>
       <IdleAuroraField />
       {mounted && currentTrack && isPlaying && (
         <CanvasVisualizer
-          model={visualModel}
-          paletteMode={paletteMode}
-          params={visualParams}
+          state={interpolatedState}
           analyserNode={analyserRef.current}
           isPlaying={isPlaying}
         />
@@ -469,9 +406,41 @@ export default function FieldPage() {
       </aside>
 
       <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl p-4 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto">
-        <FieldControls visualModel={visualModel} paletteMode={paletteMode} visualParams={visualParams} isHost={isHost}
-          onModelChange={handleModelChange} onPaletteChange={handlePaletteChange} onParamChange={handleParamChange}
-          onMutate={handleMutate} onExport={handleExport} />
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">Visual Journey</span>
+              <span className="font-mono text-[9px] text-frost/40">{currentPreset.name}</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[9px] text-subtle">→ {targetPreset.name}</span>
+                <span className="font-mono text-[9px] text-frost/50">{journeyProgress.toFixed(1)}%</span>
+              </div>
+              <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
+                <div className="h-full rounded-full bg-brass transition-all duration-1000" style={{ width: `${journeyProgress}%` }} />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" className="text-[10px] font-mono" onClick={() => setShowDebug((v) => !v)}>
+              {showDebug ? "Hide" : "Debug"}
+            </Button>
+            <Button size="sm" variant="ghost" className="text-[10px] font-mono" onClick={handleExport}>
+              Export PNG
+            </Button>
+          </div>
+          {showDebug && (
+            <div className="space-y-1.5 font-mono text-[9px] text-frost/50">
+              <div>room seed: {roomSeed.current}</div>
+              <div>phase: {journey.phase}</div>
+              <div>palette: {interpolatedState.palette.join(", ")}</div>
+              <div>layers — m: {interpolatedState.membraneAmount.toFixed(2)} t: {interpolatedState.topographyAmount.toFixed(2)} p: {interpolatedState.particleAmount.toFixed(2)} g: {interpolatedState.gridAmount.toFixed(2)}</div>
+              <div>glow: {interpolatedState.glow.toFixed(2)} blur: {interpolatedState.blur.toFixed(2)} speed: {interpolatedState.speed.toFixed(2)}</div>
+              <div>audio sens: {interpolatedState.audioSensitivity.toFixed(2)}</div>
+            </div>
+          )}
+        </div>
       </aside>
 
       <TransportBar currentTrack={currentTrack} isPlaying={isPlaying} currentTime={currentTime} duration={duration}
@@ -480,7 +449,6 @@ export default function FieldPage() {
         onNext={() => nextTrack && handleSelectTrack(nextTrack)}
         previousTrack={prevTrack} nextTrack={nextTrack} />
 
-      {/* Debug: bypass native audio player */}
       {currentTrack && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">
           <button
