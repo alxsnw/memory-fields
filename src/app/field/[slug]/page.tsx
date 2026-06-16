@@ -200,7 +200,7 @@ export default function FieldPage() {
     });
     audio.addEventListener("ended", () => {
       setIsPlaying(false);
-      syncState({ is_playing: false, current_time: 0 });
+      syncState({ is_playing: false, seek_position: 0 });
     });
 
     return () => {
@@ -230,7 +230,7 @@ export default function FieldPage() {
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
-      syncState({ is_playing: false, paused_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
+      syncState({ is_playing: false, paused_at: new Date().toISOString(), seek_position: audioRef.current.currentTime });
       return;
     }
 
@@ -287,14 +287,14 @@ export default function FieldPage() {
     }
 
     setIsPlaying(true);
-    syncState({ is_playing: true, started_at: new Date().toISOString(), current_time: el.currentTime });
+    syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: el.currentTime });
   };
 
   const handleSeek = (time: number) => {
     if (!audioRef.current || !isHost) return;
     audioRef.current.currentTime = time;
     setCurrentTime(time);
-    syncState({ current_time: time });
+    syncState({ seek_position: time });
   };
 
   const handleSelectTrack = async (track: Track) => {
@@ -304,7 +304,7 @@ export default function FieldPage() {
     setCurrentTime(0);
     const supabase = getClient();
     await supabase.from("room_state").upsert(
-      { room_id: room.id, current_track_id: track.id, is_playing: false, current_time: 0 },
+      { room_id: room.id, current_track_id: track.id, is_playing: false, seek_position: 0 },
       { onConflict: "room_id" },
     );
     await supabase.from("tracks").update({ last_played_at: new Date().toISOString() }).eq("id", track.id);

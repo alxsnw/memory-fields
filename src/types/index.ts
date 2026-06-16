@@ -44,7 +44,7 @@ export interface RoomState {
   room_id: string;
   current_track_id: string | null;
   is_playing: boolean;
-  current_time: number;
+  seek_position: number;
   started_at: string | null;
   paused_at: string | null;
   updated_at: string;
