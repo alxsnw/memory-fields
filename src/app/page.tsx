@@ -53,6 +53,7 @@ export default function LandingPage() {
       router.push(`/field/${slug}?clientId=${clientId}&name=${encodeURIComponent(name.trim())}`);
     } catch (err) {
       console.error("Create room error:", err);
+      alert("Error: " + (err instanceof Error ? err.message : "Unknown error"));
       setCreating(false);
     }
   };
@@ -86,11 +87,29 @@ export default function LandingPage() {
           <Button
             size="lg"
             className="w-48"
-            onClick={() => {
+            onClick={async () => {
               const saved = getSavedName();
               if (saved) {
                 setName(saved);
-                setNameDialog(true);
+                // Need to use the saved value directly since setState is async
+                setCreating(true);
+                try {
+                  const slug = uuid().slice(0, 8);
+                  const clientId = uuid();
+                  const supabase = getSupabase();
+                  const { data: room } = await supabase.from("rooms")
+                    .insert({ slug, title: "Untitled Field", host_client_id: clientId })
+                    .select().single();
+                  if (!room) throw new Error("Failed to create room");
+                  await supabase.from("room_state").insert({ room_id: room.id, visual_seed: Math.floor(Math.random() * 9999) });
+                  await supabase.from("connected_clients").insert({ client_id: clientId, room_id: room.id, display_name: saved, role: "host" });
+                  saveName(saved);
+                  router.push(`/field/${slug}?clientId=${clientId}&name=${encodeURIComponent(saved)}`);
+                } catch (err) {
+                  console.error(err);
+                  alert("Error: " + (err instanceof Error ? err.message : "Unknown error"));
+                  setCreating(false);
+                }
               } else {
                 setNameDialog(true);
               }
