@@ -185,6 +185,9 @@ export default function FieldPage() {
       setIsPlaying(false);
       syncState({ is_playing: false, paused_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
     } else {
+      if (audioCtxRef.current?.state === "suspended") {
+        await audioCtxRef.current.resume();
+      }
       await audioRef.current.play();
       setIsPlaying(true);
       syncState({ is_playing: true, started_at: new Date().toISOString(), current_time: audioRef.current.currentTime });
