@@ -219,10 +219,10 @@ export default function FieldPage() {
   const syncState = async (partial: Record<string, unknown>) => {
     if (!room) return;
     const supabase = getClient();
-    const { error, status, statusText } = await supabase
+    const result = await supabase
       .from("room_state")
       .upsert({ room_id: room.id, ...partial }, { onConflict: "room_id" });
-    if (error) console.error("[syncState] upsert error:", error, { status, statusText, partial });
+    if (result.error) console.error("[syncState] upsert error:", JSON.stringify(result.error), { partial });
   };
 
   const handlePlayPause = async () => {
