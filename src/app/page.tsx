@@ -83,7 +83,7 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
-            className="!bg-transparent border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-frost/40 !font-normal tracking-normal transition-[border-color,background,color] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:border-white/[0.18] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
+            className="relative !bg-transparent border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-frost/40 !font-normal tracking-normal transition-[border-color,background,color] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:border-white/[0.18] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
             onClick={async () => {
               const saved = getSavedName();
               if (saved) {
@@ -112,7 +112,16 @@ export default function LandingPage() {
               }
             }}
           >
-            Create Field
+            <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-px' : ''}`}>
+              Create Field
+            </span>
+            {creating && (
+              <span className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0.2s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0.4s' }} />
+              </span>
+            )}
           </Button>
           <p className="text-[10px] font-mono uppercase tracking-[0.1em] text-subtle">
             private · persistent · shared

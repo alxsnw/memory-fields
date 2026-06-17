@@ -68,7 +68,12 @@
   8% { opacity: 1; }
   30% { left: 110%; opacity: 0.55; }
   31% { opacity: 0; }
-  100% { left: 110%; opacity: 0; }
+   100% { left: 110%; opacity: 0; }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.5; }
 }
 
 .plasma-glow {
