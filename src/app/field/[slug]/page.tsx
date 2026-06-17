@@ -392,6 +392,33 @@ export default function FieldPage() {
     };
   }, [currentTrack?.id]);
 
+  // Auto-play first track after upload
+  useEffect(() => {
+    if (!currentTrack || !isHost || isPlaying) return;
+    if (tracks.length !== 1) return; // Only auto-play for the very first track
+
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const tryAutoPlay = () => {
+      if (audioCtxRef.current?.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      audio.play().then(() => {
+        setIsPlaying(true);
+        syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: 0 });
+      }).catch((err) => {
+        console.warn("[autoplay] failed:", err);
+      });
+    };
+
+    if (audio.readyState >= 3) {
+      tryAutoPlay();
+    } else {
+      audio.addEventListener("canplay", tryAutoPlay, { once: true });
+    }
+  }, [currentTrack?.id, tracks.length, isHost]);
+
   const syncState = async (partial: Record<string, unknown>) => {
     if (!room) return;
     const supabase = getClient();
