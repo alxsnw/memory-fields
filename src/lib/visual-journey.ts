@@ -33,6 +33,86 @@ export interface InterpolatedState {
   fieldScale: number;
 }
 
+export const MIN_VALUES = {
+  glow: 0.25,
+  membraneAmount: 0.15,
+  topographyAmount: 0.12,
+  particleAmount: 0.12,
+  gridAmount: 0.1,
+  lineDensity: 0.15,
+  density: 0.15,
+  audioSensitivity: 0.12,
+  fieldScale: 0.35,
+};
+
+type LayerKey = "membraneAmount" | "topographyAmount" | "particleAmount" | "gridAmount";
+const LAYER_KEYS: LayerKey[] = ["membraneAmount", "topographyAmount", "particleAmount", "gridAmount"];
+
+export function estimateBrightness(state: InterpolatedState): number {
+  const r = parseInt(state.palette[0].slice(1, 3), 16);
+  const g = parseInt(state.palette[0].slice(3, 5), 16);
+  const b = parseInt(state.palette[0].slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const layers = LAYER_KEYS.reduce((sum, k) => sum + state[k], 0) / LAYER_KEYS.length;
+  return luminance * 0.3 + state.glow * 0.25 + layers * 0.45;
+}
+
+export function getDominantLayer(state: InterpolatedState): LayerKey {
+  let max = 0;
+  let best: LayerKey = "membraneAmount";
+  for (const k of LAYER_KEYS) {
+    if (state[k] > max) { max = state[k]; best = k; }
+  }
+  return best;
+}
+
+export function visibilityCompensation(state: InterpolatedState, isPlaying: boolean): {
+  state: InterpolatedState;
+  active: boolean;
+} {
+  let active = false;
+  const c = { ...state };
+
+  for (const k of Object.keys(MIN_VALUES) as (keyof InterpolatedState)[]) {
+    if (k in MIN_VALUES && c[k] < MIN_VALUES[k as keyof typeof MIN_VALUES]) {
+      c[k] = MIN_VALUES[k as keyof typeof MIN_VALUES];
+      active = true;
+    }
+  }
+
+  const activeLayerCount = LAYER_KEYS.filter((k) => c[k] >= 0.3).length;
+  if (activeLayerCount === 0) {
+    const sorted = LAYER_KEYS.slice().sort((a, b) => c[b] - c[a]);
+    c[sorted[0]] = Math.max(c[sorted[0]], 0.4);
+    c[sorted[1]] = Math.max(c[sorted[1]], 0.18);
+    c.glow = Math.max(c.glow, 0.35);
+    active = true;
+  }
+
+  if (isPlaying) {
+    c.glow = Math.min(1, c.glow * 1.2);
+    c.audioSensitivity = Math.min(1, c.audioSensitivity * 1.15);
+    for (const k of LAYER_KEYS) {
+      if (c[k] > 0 && c[k] < 0.35) {
+        c[k] = Math.min(1, c[k] * 1.25);
+        active = true;
+      }
+    }
+  }
+
+  const brightness = estimateBrightness(c);
+  if (brightness < 0.28) {
+    c.glow = Math.min(1, c.glow * 1.3);
+    const dominant = getDominantLayer(c);
+    c[dominant] = Math.min(1, c[dominant] * 1.25);
+    c.audioSensitivity = Math.min(1, c.audioSensitivity * 1.1);
+    active = true;
+  }
+  c.blur = Math.min(c.blur, 0.75);
+
+  return { state: c, active };
+}
+
 export function createJourney(roomSeed: number, isPlaying: boolean): JourneyState {
   const initialPreset = getPresetBySeed(roomSeed);
   const target = pickCompatibleNext(initialPreset, roomSeed);

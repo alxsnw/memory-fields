@@ -1,15 +1,15 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { v4 as uuid } from "uuid";
 import { supabase as getSupabase } from "@/lib/supabase";
 import { getSavedName, saveName } from "@/lib/name-store";
 import { cn } from "@/lib/utils";
 import type { Room, Track, RoomState, ConnectedClient, SyncStatus } from "@/types";
-import type { InterpolatedState } from "@/lib/visual-journey";
-import { createJourney, tickJourney, getInterpolatedState, updateJourneyPlayState } from "@/lib/visual-journey";
+import type { JourneyState, InterpolatedState } from "@/lib/visual-journey";
+import { createJourney, tickJourney, getInterpolatedState, updateJourneyPlayState, visibilityCompensation, estimateBrightness } from "@/lib/visual-journey";
 import { getPreset } from "@/lib/presets";
 
 import Brand from "@/components/sidebar/brand";
@@ -18,7 +18,9 @@ import NowPlaying from "@/components/sidebar/now-playing";
 import { MemoryArchive } from "@/components/archive/memory-archive";
 import { TransportBar } from "@/components/transport/transport-bar";
 import { CanvasVisualizer } from "@/components/visualizer/canvas-visualizer";
+import AtlasScan from "@/components/visualizer/atlas-scan";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
+import { GlitchContainer } from "@/components/ui/glitch-container";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +65,21 @@ export default function FieldPage() {
   const [mounted, setMounted] = useState(false);
   const [showBypass, setShowBypass] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [showAtlasScan, setShowAtlasScan] = useState(false);
+  const [glitchEnabled, setGlitchEnabled] = useState(false);
+  const [visibilityBoost, setVisibilityBoost] = useState(true);
+  const visibilityBoostRef = useRef(true);
+  visibilityBoostRef.current = visibilityBoost;
+  const [compActive, setCompActive] = useState(false);
+  const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
+
+  const handleArchive = useCallback((track: Track) => {
+    setArchivedTrackIds((prev) => {
+      const next = new Set(prev);
+      next.add(track.id);
+      return next;
+    });
+  }, []);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -72,7 +89,11 @@ export default function FieldPage() {
 
   const roomSeed = useRef(getRoomSeed(slug));
   const [journey, setJourney] = useState(() => createJourney(roomSeed.current, false));
-  const [interpolatedState, setInterpolatedState] = useState<InterpolatedState>(() => getInterpolatedState(journey));
+  const [interpolatedState, setInterpolatedState] = useState<InterpolatedState>(() => {
+    const raw = getInterpolatedState(journey);
+    const comp = visibilityCompensation(raw, false);
+    return comp.state;
+  });
 
   const currentTrack = tracks.find((t) => t.id === roomState?.current_track_id) || null;
   const sortedTracks = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
@@ -88,7 +109,7 @@ export default function FieldPage() {
       setJourney((prev) => {
         const updated = tickJourney(prev);
         if (updated !== prev) {
-          setInterpolatedState(getInterpolatedState(updated));
+          applyInterpolatedState(updated, updated.isPlaying);
         }
         return updated;
       });
@@ -101,11 +122,27 @@ export default function FieldPage() {
     setJourney((prev) => {
       const updated = updateJourneyPlayState(prev, isPlaying);
       if (updated !== prev) {
-        setInterpolatedState(getInterpolatedState(updated));
+        applyInterpolatedState(updated, isPlaying);
       }
       return updated;
     });
   }, [isPlaying]);
+
+  function applyInterpolatedState(j: JourneyState, playing: boolean) {
+    const raw = getInterpolatedState(j);
+    if (visibilityBoostRef.current) {
+      const comp = visibilityCompensation(raw, playing);
+      setInterpolatedState(comp.state);
+      setCompActive(comp.active);
+    } else {
+      setInterpolatedState(raw);
+      setCompActive(false);
+    }
+  }
+
+  const handleToggleBoost = useCallback(() => {
+    setVisibilityBoost((v) => !v);
+  }, []);
 
   const loadRoom = async () => {
     const supabase = getClient();
@@ -365,8 +402,11 @@ export default function FieldPage() {
           state={interpolatedState}
           analyserNode={analyserRef.current}
           isPlaying={isPlaying}
+          glitchAmount={glitchEnabled ? 0.4 : 0}
         />
       )}
+
+      <AtlasScan active={showAtlasScan} seed={roomSeed.current} />
 
       <div className="fixed inset-0 pointer-events-none z-[1]">
         <div className="absolute left-0 top-0 bottom-0 w-[400px] bg-gradient-to-r from-deep/60 to-transparent" />
@@ -394,16 +434,18 @@ export default function FieldPage() {
         </DialogContent>
       </Dialog>
 
-      <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-4 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
-        <div className="shrink-0">
-          <Brand />
-          <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
-          <div className="mt-5 mb-5">
-            <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
+      <GlitchContainer active={glitchEnabled} frequency={0.0008}>
+        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-4 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
+          <div className="shrink-0">
+            <Brand />
+            <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
+            <div className="mt-5 mb-5">
+              <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
+            </div>
           </div>
-        </div>
-        <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} onSelectTrack={handleSelectTrack} />
-      </aside>
+          <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
+        </aside>
+      </GlitchContainer>
 
       <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl p-4 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto">
         <div className="space-y-4">
@@ -422,12 +464,21 @@ export default function FieldPage() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="ghost" className="text-[10px] font-mono" onClick={() => setShowDebug((v) => !v)}>
-              {showDebug ? "Hide" : "Debug"}
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleToggleBoost}>
+              {visibilityBoost ? "Boost" : "NoBoost"}
             </Button>
-            <Button size="sm" variant="ghost" className="text-[10px] font-mono" onClick={handleExport}>
-              Export PNG
+            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", showAtlasScan && "text-cyan/70")} onClick={() => setShowAtlasScan((v) => !v)}>
+              Atlas
+            </Button>
+            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", glitchEnabled && "text-violet/70")} onClick={() => setGlitchEnabled((v) => !v)}>
+              Glitch
+            </Button>
+            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => setShowDebug((v) => !v)}>
+              {showDebug ? "Hide" : "Dbg"}
+            </Button>
+            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleExport}>
+              PNG
             </Button>
           </div>
           {showDebug && (
@@ -438,16 +489,24 @@ export default function FieldPage() {
               <div>layers — m: {interpolatedState.membraneAmount.toFixed(2)} t: {interpolatedState.topographyAmount.toFixed(2)} p: {interpolatedState.particleAmount.toFixed(2)} g: {interpolatedState.gridAmount.toFixed(2)}</div>
               <div>glow: {interpolatedState.glow.toFixed(2)} blur: {interpolatedState.blur.toFixed(2)} speed: {interpolatedState.speed.toFixed(2)}</div>
               <div>audio sens: {interpolatedState.audioSensitivity.toFixed(2)}</div>
+              <div className="border-t border-white/[0.06] pt-1 mt-2">
+                <div className={cn("text-[8px]", compActive ? "text-cyan/60" : "text-frost/30")}>
+                  visibility comp: {compActive ? "ACTIVE" : "inactive"}
+                </div>
+                <div>brightness: {estimateBrightness(interpolatedState).toFixed(3)}</div>
+                <div>boost: {visibilityBoost ? "ON" : "OFF"}</div>
+              </div>
             </div>
           )}
         </div>
       </aside>
 
-      <TransportBar currentTrack={currentTrack} isPlaying={isPlaying} currentTime={currentTime} duration={duration}
-        isHost={isHost} syncStatus={syncStatus} onPlayPause={handlePlayPause} onSeek={handleSeek}
-        onPrevious={() => prevTrack && handleSelectTrack(prevTrack)}
-        onNext={() => nextTrack && handleSelectTrack(nextTrack)}
-        previousTrack={prevTrack} nextTrack={nextTrack} />
+      <GlitchContainer active={glitchEnabled} frequency={0.001}>
+        <TransportBar currentTrack={currentTrack} isPlaying={isPlaying} currentTime={currentTime} duration={duration}
+          isHost={isHost} syncStatus={syncStatus} onPlayPause={handlePlayPause} onSeek={handleSeek}
+          onNext={() => nextTrack && handleSelectTrack(nextTrack)}
+          nextTrack={nextTrack} />
+      </GlitchContainer>
 
       {currentTrack && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">

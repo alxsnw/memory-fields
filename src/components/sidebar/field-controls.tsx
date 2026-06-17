@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FieldSlider } from "@/components/ui/field-slider";
 import { Button } from "@/components/ui/button";
 import type { VisualModel, PaletteMode, VisualParams } from "@/types";
 
@@ -40,33 +41,6 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">{title}</span>
       </button>
       {open && <div className="space-y-2.5">{children}</div>}
-    </div>
-  );
-}
-
-function SliderControl({ label, value, onChange, min = 0, max = 100 }: {
-  label: string; value: number; onChange: (v: number) => void; min?: number; max?: number;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] text-subtle">{label}</span>
-        <span className="font-mono text-[10px] text-frost/60">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-[2px] appearance-none bg-white/[0.08] rounded-full cursor-pointer
-          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5
-          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-frost/80
-          [&::-webkit-slider-thumb]:cursor-pointer
-          [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5
-          [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-frost/80
-          [&::-moz-range-thumb]:border-0"
-      />
     </div>
   );
 }
@@ -124,13 +98,13 @@ export function FieldControls({
               </button>
             ))}
           </div>
-          <SliderControl label="Intensity" value={visualParams.intensity} onChange={(v) => onParamChange({ intensity: v })} />
-          <SliderControl label="Density" value={visualParams.density} onChange={(v) => onParamChange({ density: v })} />
-          <SliderControl label="Speed" value={visualParams.speed} onChange={(v) => onParamChange({ speed: v })} />
-          <SliderControl label="Memory" value={visualParams.memory} onChange={(v) => onParamChange({ memory: v })} />
-          <SliderControl label="Detail" value={visualParams.detail} onChange={(v) => onParamChange({ detail: v })} />
-          <SliderControl label="Glow" value={visualParams.glow} onChange={(v) => onParamChange({ glow: v })} />
-          <SliderControl label="Randomness" value={visualParams.randomness} onChange={(v) => onParamChange({ randomness: v })} />
+          <FieldSlider label="Intensity" value={visualParams.intensity} onChange={(v) => onParamChange({ intensity: v })} />
+          <FieldSlider label="Density" value={visualParams.density} onChange={(v) => onParamChange({ density: v })} />
+          <FieldSlider label="Speed" value={visualParams.speed} onChange={(v) => onParamChange({ speed: v })} />
+          <FieldSlider label="Memory" value={visualParams.memory} onChange={(v) => onParamChange({ memory: v })} />
+          <FieldSlider label="Detail" value={visualParams.detail} onChange={(v) => onParamChange({ detail: v })} />
+          <FieldSlider label="Glow" value={visualParams.glow} onChange={(v) => onParamChange({ glow: v })} />
+          <FieldSlider label="Randomness" value={visualParams.randomness} onChange={(v) => onParamChange({ randomness: v })} />
         </Section>
 
         {/* Processing */}
@@ -152,29 +126,29 @@ export function FieldControls({
             </button>
           </div>
           {visualParams.smoothing && (
-            <SliderControl label="Amount" value={visualParams.smoothingAmount} onChange={(v) => onParamChange({ smoothingAmount: v })} />
+            <FieldSlider label="Amount" value={visualParams.smoothingAmount} onChange={(v) => onParamChange({ smoothingAmount: v })} />
           )}
-          <SliderControl label="Core Size" value={visualParams.coreSize} onChange={(v) => onParamChange({ coreSize: v })} />
-          <SliderControl label="Expansion" value={visualParams.expansion} onChange={(v) => onParamChange({ expansion: v })} />
-          <SliderControl label="Edge Reactivity" value={visualParams.edgeReactivity} onChange={(v) => onParamChange({ edgeReactivity: v })} />
-          <SliderControl label="Center Bias" value={visualParams.centerBias} onChange={(v) => onParamChange({ centerBias: v })} />
+          <FieldSlider label="Core Size" value={visualParams.coreSize} onChange={(v) => onParamChange({ coreSize: v })} />
+          <FieldSlider label="Expansion" value={visualParams.expansion} onChange={(v) => onParamChange({ expansion: v })} />
+          <FieldSlider label="Edge Reactivity" value={visualParams.edgeReactivity} onChange={(v) => onParamChange({ edgeReactivity: v })} />
+          <FieldSlider label="Center Bias" value={visualParams.centerBias} onChange={(v) => onParamChange({ centerBias: v })} />
         </Section>
 
         {/* Post-Processing */}
         <Section title="Post-Processing" defaultOpen={false}>
-          <SliderControl label="Bloom" value={visualParams.bloom} onChange={(v) => onParamChange({ bloom: v })} />
-          <SliderControl label="Grain" value={visualParams.grain} onChange={(v) => onParamChange({ grain: v })} />
+          <FieldSlider label="Bloom" value={visualParams.bloom} onChange={(v) => onParamChange({ bloom: v })} />
+          <FieldSlider label="Grain" value={visualParams.grain} onChange={(v) => onParamChange({ grain: v })} />
           {visualParams.grain > 0 && (
             <>
-              <SliderControl label="Grain Intensity" value={visualParams.grainIntensity} onChange={(v) => onParamChange({ grainIntensity: v })} />
-              <SliderControl label="Grain Size" value={visualParams.grainSize} onChange={(v) => onParamChange({ grainSize: v })} />
+              <FieldSlider label="Grain Intensity" value={visualParams.grainIntensity} onChange={(v) => onParamChange({ grainIntensity: v })} />
+              <FieldSlider label="Grain Size" value={visualParams.grainSize} onChange={(v) => onParamChange({ grainSize: v })} />
             </>
           )}
-          <SliderControl label="Chromatic" value={visualParams.chromatic} onChange={(v) => onParamChange({ chromatic: v })} />
-          <SliderControl label="Scanlines" value={visualParams.scanlines} onChange={(v) => onParamChange({ scanlines: v })} />
-          <SliderControl label="Vignette" value={visualParams.vignette} onChange={(v) => onParamChange({ vignette: v })} />
-          <SliderControl label="CRT Curve" value={visualParams.crtCurve} onChange={(v) => onParamChange({ crtCurve: v })} />
-          <SliderControl label="Phosphor" value={visualParams.phosphor} onChange={(v) => onParamChange({ phosphor: v })} />
+          <FieldSlider label="Chromatic" value={visualParams.chromatic} onChange={(v) => onParamChange({ chromatic: v })} />
+          <FieldSlider label="Scanlines" value={visualParams.scanlines} onChange={(v) => onParamChange({ scanlines: v })} />
+          <FieldSlider label="Vignette" value={visualParams.vignette} onChange={(v) => onParamChange({ vignette: v })} />
+          <FieldSlider label="CRT Curve" value={visualParams.crtCurve} onChange={(v) => onParamChange({ crtCurve: v })} />
+          <FieldSlider label="Phosphor" value={visualParams.phosphor} onChange={(v) => onParamChange({ phosphor: v })} />
         </Section>
 
         {/* Variation */}

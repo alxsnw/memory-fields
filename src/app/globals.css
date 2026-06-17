@@ -39,6 +39,14 @@
   from { width: 0%; }
 }
 
+@keyframes laser-sweep {
+  0% { left: -35%; opacity: 0; }
+  8% { opacity: 1; }
+  30% { left: 110%; opacity: 0.55; }
+  31% { opacity: 0; }
+  100% { left: 110%; opacity: 0; }
+}
+
 .plasma-glow {
   animation: plasma-drift 14s ease-in-out infinite;
 }

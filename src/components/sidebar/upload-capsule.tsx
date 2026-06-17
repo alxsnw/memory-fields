@@ -3,7 +3,6 @@
 import { useRef, useState } from "react"
 import { Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 
 const ALLOWED_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "audio/flac", "audio/x-flac", "audio/x-m4a", "audio/aac"]
 const MAX_SIZE = 100 * 1024 * 1024
@@ -17,6 +16,10 @@ interface UploadCapsuleProps {
 export default function UploadCapsule({ onUpload, uploading, progress }: UploadCapsuleProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [isHovering, setIsHovering] = useState(false)
+
+  const isDeterminate = uploading && progress > 0 && progress < 100
+  const sweepDuration = uploading ? (isDeterminate ? 2.5 : 1.5) : (isHovering ? 4 : 8)
 
   function handleFile(file: File) {
     if (!ALLOWED_TYPES.includes(file.type) && !/\.(mp3|wav|ogg|m4a|flac)$/i.test(file.name)) {
@@ -49,6 +52,8 @@ export default function UploadCapsule({ onUpload, uploading, progress }: UploadC
       onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
       className={cn(
         "relative w-full h-14 rounded-capsule overflow-hidden cursor-pointer select-none",
         "border transition-all duration-300",
@@ -60,17 +65,40 @@ export default function UploadCapsule({ onUpload, uploading, progress }: UploadC
         !uploading && "hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.985]",
       )}
     >
-      <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-r from-cyan/10 via-violet/10 to-transparent",
-          uploading ? "opacity-60" : "opacity-40",
-        )}
-        style={{ animation: "plasma-drift 14s ease-in-out infinite" }}
-      />
+      {/* Laser sweep beam */}
+      <div className="absolute inset-0 overflow-hidden rounded-capsule pointer-events-none">
+        <div
+          className="absolute top-0 bottom-0 w-[35%] skew-x-[-18deg] blur-[8px] pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent 0%, rgba(120,223,255,0) 10%, rgba(120,223,255,0.18) 35%, rgba(244,246,250,0.35) 50%, rgba(167,139,250,0.20) 65%, transparent 100%)",
+            animationName: "laser-sweep",
+            animationDuration: `${sweepDuration}s`,
+            animationTimingFunction: "ease-in-out",
+            animationIterationCount: "infinite",
+            opacity: uploading || isHovering ? 1 : 0.6,
+            transition: "opacity 300ms ease",
+          }}
+        />
+      </div>
 
+      {/* Progress fill layer */}
+      {uploading && progress > 0 && (
+        <div
+          className="absolute inset-y-0 left-0 rounded-capsule pointer-events-none"
+          style={{
+            width: `${Math.min(100, progress)}%`,
+            background:
+              "linear-gradient(90deg, rgba(120,223,255,0.10), rgba(120,223,255,0.18), rgba(167,139,250,0.16))",
+          }}
+        />
+      )}
+
+      {/* Inner top highlight */}
       <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent rounded-capsule pointer-events-none" />
 
-      <div className="absolute inset-0 flex items-center justify-center gap-2">
+      {/* Content */}
+      <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
         {!uploading && (
           <Upload size={12} className="text-frost/60" />
         )}

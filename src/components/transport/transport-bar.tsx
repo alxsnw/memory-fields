@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
+import { Play, Pause, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Track, SyncStatus } from "@/types";
 
@@ -19,9 +19,7 @@ interface TransportBarProps {
   syncStatus: SyncStatus;
   onPlayPause: () => void;
   onSeek: (time: number) => void;
-  onPrevious: () => void;
   onNext: () => void;
-  previousTrack: Track | null;
   nextTrack: Track | null;
 }
 
@@ -33,56 +31,57 @@ const syncColors: Record<SyncStatus, string> = {
 
 export function TransportBar({
   currentTrack, isPlaying, currentTime, duration, isHost, syncStatus,
-  onPlayPause, onSeek, onPrevious, onNext, previousTrack, nextTrack,
+  onPlayPause, onSeek, onNext, nextTrack,
 }: TransportBarProps) {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="fixed left-1/2 bottom-8 -translate-x-1/2 w-[min(860px,calc(100vw-64px))] h-[88px] rounded-3xl px-[18px] py-[14px] bg-graphite/88 border border-white/[0.08] backdrop-blur-[18px] shadow-[0_24px_80px_rgba(0,0,0,0.42)] flex items-center gap-4 z-50">
-      {/* Previous Track Ghost */}
-      <div className={cn("w-[140px] shrink-0", !previousTrack && "opacity-0 pointer-events-none")}>
-        <div className="font-mono text-[9px] leading-[11px] uppercase tracking-[0.08em] text-frost/32 mb-0.5">
-          Previous
-        </div>
-        <div className="font-sans text-[11px] leading-[14px] text-soft/38 truncate">
-          {previousTrack?.display_name || "—"}
-        </div>
+
+      {/* Left zone: Play/Pause */}
+      <div className="w-[60px] shrink-0 flex items-center justify-center">
+        <button
+          onClick={onPlayPause}
+          disabled={!currentTrack || !isHost}
+          className={cn(
+            "w-11 h-11 rounded-full flex items-center justify-center transition-all",
+            "bg-white/[0.08] border border-white/[0.12]",
+            "hover:bg-white/[0.13] hover:border-white/[0.22] hover:shadow-[0_0_24px_rgba(245,250,255,0.08)]",
+            "active:scale-95",
+            "disabled:opacity-36 disabled:cursor-not-allowed",
+          )}
+        >
+          {isPlaying ? (
+            <Pause className="w-[18px] h-[18px] text-frost" />
+          ) : (
+            <Play className="w-[18px] h-[18px] text-frost ml-0.5" />
+          )}
+        </button>
       </div>
 
-      {/* Play/Pause */}
-      <button
-        onClick={onPlayPause}
-        disabled={!currentTrack || !isHost}
-        className={cn(
-          "w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all",
-          "bg-white/[0.08] border border-white/[0.12]",
-          "hover:bg-white/[0.13] hover:border-white/[0.22] hover:shadow-[0_0_24px_rgba(245,250,255,0.08)]",
-          "active:scale-95",
-          "disabled:opacity-36 disabled:cursor-not-allowed",
-        )}
-      >
-        {isPlaying ? (
-          <Pause className="w-[18px] h-[18px] text-frost" />
-        ) : (
-          <Play className="w-[18px] h-[18px] text-frost ml-0.5" />
-        )}
-      </button>
-
-      {/* Current Track Block */}
-      <div className="flex-1 min-w-[320px]">
+      {/* Center zone: NOW PLAYING + progress */}
+      <div className="flex-1 min-w-[280px]">
         {currentTrack ? (
           <>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-[9px] leading-[11px] uppercase text-brass tracking-[0.08em]">
+            <div className="flex items-center gap-3 mb-0.5">
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-brass/80">
                 Now Playing
+              </span>
+              <span className={cn(
+                "font-mono text-[8px] uppercase tracking-[0.08em] px-1.5 py-[1px] rounded-full border",
+                syncColors[syncStatus],
+                syncStatus === "synced" ? "border-success/20 bg-success/6" :
+                syncStatus === "buffering" ? "border-brass/20 bg-brass/6" :
+                "border-error/20 bg-error/6",
+              )}>
+                {syncStatus}
               </span>
             </div>
             <div className="text-[13px] leading-4 font-medium text-frost truncate mb-1">
               {currentTrack.display_name}
             </div>
-            {/* Timeline */}
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] leading-[14px] text-frost/52 w-10 text-right">
+              <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0">
                 {formatTime(currentTime)}
               </span>
               <div
@@ -107,7 +106,7 @@ export function TransportBar({
                   style={{ left: `${progress}%`, marginLeft: -4 }}
                 />
               </div>
-              <span className="font-mono text-[11px] leading-[14px] text-frost/52 w-10">
+              <span className="font-mono text-[11px] text-frost/52 w-10 shrink-0">
                 {formatTime(duration)}
               </span>
             </div>
@@ -119,19 +118,31 @@ export function TransportBar({
         )}
       </div>
 
-      {/* Next Track Ghost */}
-      <div className={cn("w-[140px] shrink-0 text-right", !nextTrack && "opacity-0 pointer-events-none")}>
-        <div className="font-mono text-[9px] leading-[11px] uppercase tracking-[0.08em] text-frost/32 mb-0.5">
-          Next
-        </div>
-        <div className="font-sans text-[11px] leading-[14px] text-soft/38 truncate">
-          {nextTrack?.display_name || "—"}
-        </div>
-      </div>
-
-      {/* Sync Status */}
-      <div className={cn("shrink-0 text-center font-mono text-[9px] leading-3 uppercase tracking-[0.06em]", currentTrack ? syncColors[syncStatus] : "text-frost/32")}>
-        {currentTrack ? syncStatus : "IDLE / WAITING FOR SIGNAL"}
+      {/* Right zone: NEXT */}
+      <div className="w-[150px] shrink-0 text-right">
+        {nextTrack ? (
+          <>
+            <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-frost/32 mb-0.5">
+              Next
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="text-[11px] text-soft/50 truncate max-w-[110px]">
+                {nextTrack.display_name}
+              </span>
+              <button
+                onClick={onNext}
+                disabled={!isHost}
+                className="shrink-0 p-0.5 rounded hover:bg-white/[0.06] transition-colors disabled:opacity-30"
+              >
+                <SkipForward className="w-3.5 h-3.5 text-frost/40" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-frost/20">
+            Next
+          </div>
+        )}
       </div>
     </div>
   );
