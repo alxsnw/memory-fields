@@ -1,10 +1,10 @@
 "use client";
 
 const RINGS = [
-  { delay: 0, duration: 13, size: 130, peakOpacity: 0.035 },
-  { delay: 4, duration: 14, size: 100, peakOpacity: 0.025 },
-  { delay: 8, duration: 12, size: 150, peakOpacity: 0.04 },
-  { delay: 12.5, duration: 15, size: 110, peakOpacity: 0.03 },
+  { delay: 0, duration: 26, size: 130, peakOpacity: 0.035 },
+  { delay: 8, duration: 28, size: 100, peakOpacity: 0.025 },
+  { delay: 16, duration: 24, size: 150, peakOpacity: 0.04 },
+  { delay: 25, duration: 30, size: 110, peakOpacity: 0.03 },
 ];
 
 export function DepthWaveRings() {
