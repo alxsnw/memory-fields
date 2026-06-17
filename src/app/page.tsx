@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { v4 as uuid } from "uuid";
 import { supabase as getSupabase } from "@/lib/supabase";
@@ -20,7 +20,9 @@ export default function LandingPage() {
   const [nameDialog, setNameDialog] = useState(false);
   const [name, setName] = useState(getSavedName() || "");
   const [creating, setCreating] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
   const [buttonHover, setButtonHover] = useState(false);
+  const clickTimeRef = useRef(0);
 
   const createRoom = async () => {
     if (!name.trim()) return;
@@ -100,7 +102,10 @@ export default function LandingPage() {
         }}
       />
 
-      <div className="relative z-10 text-center max-w-lg">
+      <div className="relative z-10 text-center max-w-lg" style={{
+        opacity: fadingOut ? 0 : 1,
+        transition: 'opacity 800ms ease-out',
+      }}>
         <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03]">
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone">v0.1</span>
         </div>
@@ -129,6 +134,7 @@ export default function LandingPage() {
                 setName(saved);
                 // Need to use the saved value directly since setState is async
                 setCreating(true);
+                clickTimeRef.current = Date.now();
                 try {
                   const slug = uuid().slice(0, 8);
                   const clientId = uuid();
@@ -140,7 +146,12 @@ export default function LandingPage() {
                   await supabase.from("room_state").insert({ room_id: room.id, visual_seed: Math.floor(Math.random() * 9999) });
                   await supabase.from("connected_clients").insert({ client_id: clientId, room_id: room.id, display_name: saved, role: "host" });
                   saveName(saved);
-                  await new Promise(r => setTimeout(r, 1600));
+                  const elapsed = Date.now() - clickTimeRef.current;
+                  if (elapsed < 4000) {
+                    await new Promise(r => setTimeout(r, 4000 - elapsed));
+                  }
+                  setFadingOut(true);
+                  await new Promise(r => setTimeout(r, 800));
                   router.push(`/field/${slug}?clientId=${clientId}&name=${encodeURIComponent(saved)}`);
                 } catch (err) {
                   console.error(err);
