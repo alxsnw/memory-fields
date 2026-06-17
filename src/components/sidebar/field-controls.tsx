@@ -7,14 +7,14 @@ import { FieldSlider } from "@/components/ui/field-slider";
 import { Button } from "@/components/ui/button";
 import type { VisualModel, PaletteMode, VisualParams } from "@/types";
 
-const VISUAL_MODELS: { value: VisualModel; label: string }[] = [
-  { value: "signal-field", label: "Signal Field" },
-  { value: "spatial-rhythm", label: "Spatial Rhythm" },
-  { value: "particle-memory", label: "Particle Memory" },
-  { value: "topographic-wave", label: "Topographic Wave" },
-  { value: "orbital-spectrum", label: "Orbital Spectrum" },
-  { value: "spectral-grid", label: "Spectral Grid" },
-  { value: "ascii-field", label: "ASCII Field" },
+const VISUAL_MODELS: { value: VisualModel; label: string; enabled: boolean }[] = [
+  { value: "signal-field", label: "Signal Field", enabled: true },
+  { value: "spatial-rhythm", label: "Spatial Rhythm", enabled: false },
+  { value: "particle-memory", label: "Particle Memory", enabled: false },
+  { value: "topographic-wave", label: "Topographic Wave", enabled: false },
+  { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: false },
+  { value: "spectral-grid", label: "Spectral Grid", enabled: false },
+  { value: "ascii-field", label: "ASCII Field", enabled: false },
 ];
 
 interface FieldControlsProps {
@@ -65,13 +65,15 @@ export function FieldControls({
             {VISUAL_MODELS.map((m) => (
               <button
                 key={m.value}
-                onClick={() => isHost && onModelChange(m.value)}
-                disabled={!isHost}
+                onClick={() => m.enabled && isHost && onModelChange(m.value)}
+                disabled={!m.enabled || !isHost}
                 className={cn(
                   "text-left px-2.5 py-2 rounded-lg border text-[11px] font-mono leading-[14px] transition-colors",
                   visualModel === m.value
                     ? "bg-white/[0.06] border-white/[0.14] text-frost"
-                    : "bg-white/[0.02] border-white/[0.06] text-subtle hover:bg-white/[0.05] hover:border-white/[0.10]",
+                    : m.enabled
+                      ? "bg-white/[0.02] border-white/[0.06] text-subtle hover:bg-white/[0.05] hover:border-white/[0.10]"
+                      : "bg-white/[0.01] border-white/[0.03] text-subtle/40 cursor-not-allowed",
                   !isHost && "opacity-60 cursor-not-allowed",
                 )}
               >
@@ -101,13 +103,9 @@ export function FieldControls({
               </button>
             ))}
           </div>
-          <FieldSlider label="Intensity" value={scale(visualParams.intensity)} onChange={(v) => onParamChange({ intensity: unscale(v) })} />
-          <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} />
-          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} />
-          <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} />
-          <FieldSlider label="Detail" value={scale(visualParams.detail)} onChange={(v) => onParamChange({ detail: unscale(v) })} />
-          <FieldSlider label="Glow" value={scale(visualParams.glow)} onChange={(v) => onParamChange({ glow: unscale(v) })} />
-          <FieldSlider label="Randomness" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} />
+          <FieldSlider label="Core Trace" value={scale(visualParams.coreTraceAmount)} onChange={(v) => onParamChange({ coreTraceAmount: unscale(v) })} />
+          <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} disabled />
+          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} disabled />
         </Section>
 
         {/* Processing */}

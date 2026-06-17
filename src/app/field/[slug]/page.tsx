@@ -184,7 +184,7 @@ export default function FieldPage() {
   const isDev = searchParams.get("dev") === "true";
 
   const defaultVisualParams: VisualParams = {
-    intensity: 0.5, density: 0.5, speed: 0.5, memory: 0.5, detail: 0.5,
+    intensity: 0.5, coreTraceAmount: 0, density: 0.5, speed: 0.5, memory: 0.5, detail: 0.5,
     glow: 0.4, randomness: 0.3, smoothing: true, smoothingAmount: 0.3,
     coreSize: 0.5, expansion: 0.5, edgeReactivity: 0.5, centerBias: 0.5,
     bloom: 0.3, grain: 0, grainIntensity: 0.5, grainSize: 0.5,
@@ -542,6 +542,7 @@ export default function FieldPage() {
           analyserNode={analyserRef.current}
           isPlaying={isPlaying}
           glitchAmount={glitchEnabled ? 0.4 : 0}
+          coreTraceAmount={visualParams.coreTraceAmount}
         />
       )}
 

@@ -72,6 +72,7 @@ export interface DisplayNameData {
 
 export interface VisualParams {
   intensity: number;
+  coreTraceAmount: number;
   density: number;
   speed: number;
   memory: number;

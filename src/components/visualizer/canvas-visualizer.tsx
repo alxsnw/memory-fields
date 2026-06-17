@@ -8,6 +8,7 @@ interface CanvasVisualizerProps {
   analyserNode: AnalyserNode | null;
   isPlaying: boolean;
   glitchAmount?: number;
+  coreTraceAmount?: number;
 }
 
 const FLOORS = {
@@ -19,7 +20,7 @@ const FLOORS = {
   lineAlpha: 0.08,
 };
 
-export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount = 0 }: CanvasVisualizerProps) {
+export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount = 0, coreTraceAmount = 1 }: CanvasVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const accumRef = useRef<HTMLCanvasElement | null>(null);
   const animRef = useRef<number>(0);
@@ -70,7 +71,9 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
 
       // Draw to accumulation canvas
       if (accumCtx) {
-        drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        if (coreTraceAmount > 0) {
+          drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+        }
         drawTopography(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
         drawParticles(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
         drawGrid(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
@@ -82,7 +85,9 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
       ctx.drawImage(accum, 0, 0);
 
       // Draw fresh layers on top
-      drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+      if (coreTraceAmount > 0) {
+        drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+      }
       drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
       drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
       drawGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
@@ -103,7 +108,7 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
     }
 
     animRef.current = requestAnimationFrame(draw);
-  }, [state, analyserNode, isPlaying, glitchAmount]);
+  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -357,17 +362,17 @@ function drawGlitch(
 /* ── Membrane ── */
 function drawMembrane(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
-  avg: number, now: number, dt: number, s: InterpolatedState,
+  avg: number, now: number, dt: number, s: InterpolatedState, coreTraceAmount: number,
 ) {
   const amount = s.membraneAmount;
   if (amount < 0.01) return;
-  ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, amount);
+  ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, amount) * coreTraceAmount;
 
   const speed = s.speed * 0.3;
   const intensity = s.audioSensitivity;
   const cx = w / 2;
   const cy = h / 2;
-  const bands = Math.min(len, 64);
+  const bands = Math.min(len, Math.floor(64 * coreTraceAmount));
   const step = len / bands;
 
   for (let b = 0; b < bands; b++) {
@@ -379,14 +384,14 @@ function drawMembrane(
     const y = cy + Math.sin(angle) * radius;
 
     ctx.beginPath();
-    ctx.arc(x, y, 1 + val * 4 * s.glow, 0, Math.PI * 2);
+    ctx.arc(x, y, (1 + val * 4 * s.glow) * coreTraceAmount, 0, Math.PI * 2);
     ctx.fillStyle = getColor(b, s.palette, bands);
     ctx.fill();
   }
 
-  const lineAlpha = Math.floor(Math.max(FLOORS.lineAlpha * 255, 15 * s.glow)).toString(16).padStart(2, "0");
+  const lineAlpha = Math.floor(Math.max(FLOORS.lineAlpha * 255, 15 * s.glow * coreTraceAmount)).toString(16).padStart(2, "0");
   ctx.strokeStyle = s.palette[0] + lineAlpha;
-  ctx.lineWidth = 0.5 + s.glow * 2;
+  ctx.lineWidth = (0.5 + s.glow * 2) * coreTraceAmount;
   ctx.beginPath();
   for (let i = 0; i < len; i += 4) {
     const x = (i / len) * w;
@@ -396,16 +401,16 @@ function drawMembrane(
   }
   ctx.stroke();
 
-  if (s.glow > 0.1) {
+  if (s.glow * coreTraceAmount > 0.1) {
     const ringRadius = Math.min(w, h) * 0.3 * s.fieldScale;
     const gr = ctx.createRadialGradient(cx, cy, ringRadius * 0.6, cx, cy, ringRadius);
     gr.addColorStop(0, "transparent");
-    gr.addColorStop(0.7, s.palette[0] + Math.floor(Math.max(FLOORS.membraneAlpha * 255, 8 * s.glow)).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.7, s.palette[0] + Math.floor(Math.max(FLOORS.membraneAlpha * 255, 8 * s.glow * coreTraceAmount)).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.beginPath();
     ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, amount * 0.4);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, amount * 0.4) * coreTraceAmount;
     ctx.fill();
   }
 
