@@ -118,6 +118,11 @@
   to { opacity: 0; }
 }
 
+@keyframes sidebar-slide-in {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
 @keyframes laser-sweep {
   0% { left: -35%; opacity: 0; }
   8% { opacity: 1; }

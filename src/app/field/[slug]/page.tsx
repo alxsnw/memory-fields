@@ -574,7 +574,7 @@ export default function FieldPage() {
       </Dialog>
 
       <GlitchContainer active={glitchEnabled} frequency={0.0008}>
-        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
+        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col" style={{ animation: 'sidebar-slide-in 0.6s ease-out 1.2s forwards', opacity: 0 }}>
           <div className="shrink-0">
             <Brand />
 
