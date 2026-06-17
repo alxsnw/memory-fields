@@ -85,8 +85,32 @@
 }
 
 @keyframes aurora-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0% {
+    opacity: 1;
+    transform: scale(0.5);
+  }
+  16.6% {
+    transform: scale(0.2);
+  }
+  33.3% {
+    opacity: 0.75;
+    transform: scale(0.5);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(0.1);
+  }
+  66.6% {
+    opacity: 0.75;
+    transform: scale(0.3);
+  }
+  83.3% {
+    transform: scale(0.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(0.2);
+  }
 }
 
 @keyframes laser-sweep {

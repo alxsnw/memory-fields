@@ -76,10 +76,7 @@ export default function LandingPage() {
           transitionDuration: '400ms',
         }}
       />
-      <div
-        className="fixed inset-0 z-0 pointer-events-none"
-        style={{ transform: 'scale(0.5)' }}
-      >
+      <div className="fixed inset-0 z-0 pointer-events-none">
         <div
           className="w-full h-full"
           style={{
