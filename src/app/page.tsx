@@ -81,6 +81,7 @@ export default function LandingPage() {
           className="w-full h-full"
           style={{
             opacity: creating ? 1 : 0,
+            transform: 'scale(0.5)',
             transition: 'opacity 1.5s ease-out',
             animation: creating ? 'aurora-pulse 18s ease-in-out 1.5s infinite' : 'none',
           }}
