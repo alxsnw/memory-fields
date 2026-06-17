@@ -83,7 +83,7 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
-            className="relative !bg-[#07080A] border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-white !font-normal tracking-normal transition-[border-color,background,color,transform] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:!scale-[1.08] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
+            className="relative !bg-[#07080A] border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-white !font-normal tracking-normal transition-[border-color,background,color,transform] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:!scale-[1.12] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
             onClick={async () => {
               const saved = getSavedName();
               if (saved) {
@@ -112,8 +112,10 @@ export default function LandingPage() {
               }
             }}
           >
-            <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-1' : ''}`}>
-              Create Field
+            <span className="block transition-transform duration-200 ease-out hover:scale-[0.893]">
+              <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-1' : ''} block`}>
+                Create Field
+              </span>
             </span>
             {creating && (
               <span className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
