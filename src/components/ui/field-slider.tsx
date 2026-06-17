@@ -100,11 +100,12 @@ export function FieldSlider({
         >
           {label}
         </span>
-        {(isHovering || isDragging) && (
-          <span className="font-mono text-[10px] text-frost/70 pointer-events-none">
-            {value}
-          </span>
-        )}
+        <span className={cn(
+          "font-mono text-[10px] pointer-events-none transition-opacity duration-[140ms]",
+          isHovering || isDragging ? "text-frost/70" : "text-frost/40",
+        )}>
+          {value}
+        </span>
       </div>
 
       <div

@@ -73,6 +73,7 @@ export default function FieldPage() {
   const [visibilityBoost, setVisibilityBoost] = useState(true);
   const visibilityBoostRef = useRef(true);
   visibilityBoostRef.current = visibilityBoost;
+  const visualParamsRef = useRef<VisualParams>(undefined as unknown as VisualParams);
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
 
@@ -184,7 +185,7 @@ export default function FieldPage() {
 
   const defaultVisualParams: VisualParams = {
     intensity: 0.5, density: 0.5, speed: 0.5, memory: 0.5, detail: 0.5,
-    glow: 0.5, randomness: 0.5, smoothing: true, smoothingAmount: 0.3,
+    glow: 0.4, randomness: 0.3, smoothing: true, smoothingAmount: 0.3,
     coreSize: 0.5, expansion: 0.5, edgeReactivity: 0.5, centerBias: 0.5,
     bloom: 0.3, grain: 0, grainIntensity: 0.5, grainSize: 0.5,
     chromatic: 0.2, scanlines: 0, vignette: 0.3, crtCurve: 0, phosphor: 0,
@@ -192,6 +193,7 @@ export default function FieldPage() {
   const visualParams = roomState?.visual_params
     ? ({ ...defaultVisualParams, ...roomState.visual_params }) as VisualParams
     : defaultVisualParams;
+  visualParamsRef.current = visualParams;
 
   const currentTrack = tracks.find((t) => t.id === roomState?.current_track_id) || null;
   const sortedTracks = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
@@ -238,6 +240,21 @@ export default function FieldPage() {
     const mod = latentRef.current?.modulation;
     if (mod && latentStateRef.current === "active" && !playing) {
       raw.glow = Math.min(1, raw.glow + 0.04 * mod.breath + 0.02 * mod.shimmer);
+    }
+    // Apply Field Controls modulation
+    const vp = visualParamsRef.current;
+    if (vp) {
+      raw.glow = Math.min(1, raw.glow * (0.5 + vp.glow * 1.0));
+      raw.speed *= (0.5 + vp.speed * 1.0);
+      raw.density = Math.min(1, raw.density * (0.5 + vp.density * 1.0));
+      raw.randomness = Math.min(1, raw.randomness * (0.5 + vp.randomness * 1.0));
+      raw.lineDensity = Math.min(1, raw.lineDensity * (0.5 + vp.detail * 1.0));
+      raw.fieldScale = Math.min(1, raw.fieldScale * (0.5 + vp.memory * 1.0));
+      const intensityMul = 0.5 + vp.intensity * 1.0;
+      raw.membraneAmount = Math.min(1, raw.membraneAmount * intensityMul);
+      raw.topographyAmount = Math.min(1, raw.topographyAmount * intensityMul);
+      raw.particleAmount = Math.min(1, raw.particleAmount * intensityMul);
+      raw.gridAmount = Math.min(1, raw.gridAmount * intensityMul);
     }
     if (visibilityBoostRef.current) {
       const comp = visibilityCompensation(raw, playing);
@@ -551,30 +568,12 @@ export default function FieldPage() {
       </Dialog>
 
       <GlitchContainer active={glitchEnabled} frequency={0.0008}>
-        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-4 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
+        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
           <div className="shrink-0">
             <Brand />
 
-            {latentState === "dormant" && (
-              <button onClick={handleWakeField} className="w-full mt-3 py-[10px] rounded-2xl border border-white/[0.08] bg-white/[0.02] text-center hover:bg-white/[0.04] transition-colors">
-                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-frost/50">FIELD DORMANT</div>
-                <div className="font-mono text-[8px] text-frost/30 mt-1">Tap to wake</div>
-              </button>
-            )}
-            {latentState === "active" && (
-              <div className="w-full mt-3 py-[10px] rounded-2xl border border-cyan/12 bg-cyan/[0.03] text-center">
-                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-cyan/50 animate-pulse">LATENT FIELD ACTIVE</div>
-                <div className="font-mono text-[8px] text-frost/40 mt-1">Waiting for signal</div>
-              </div>
-            )}
-            {latentState === "absorbed" && (
-              <div className="w-full mt-2 text-center">
-                <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-cyan/30">Signal absorbed</div>
-              </div>
-            )}
-
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
-            <div className="mt-5 mb-5">
+            <div className="mt-3 mb-3">
               <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
             </div>
           </div>
@@ -582,7 +581,7 @@ export default function FieldPage() {
         </aside>
       </GlitchContainer>
 
-      <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl p-4 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto">
+      <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl px-3 py-3 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto panel-scroll">
         {isDev ? (
           <div className="space-y-4">
             <div>

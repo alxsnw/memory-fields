@@ -1,15 +1,15 @@
 export default function Brand() {
   return (
-    <div className="mb-5">
+    <div className="mb-4">
       <p
-        className="text-frost"
-        style={{ fontFamily: "Inter, system-ui, -apple-system, sans-serif", fontSize: 29, lineHeight: 1.1, fontWeight: 550, letterSpacing: "-0.02em" }}
+        className="text-[rgba(245,250,255,0.92)]"
+        style={{ fontFamily: "Inter, system-ui, -apple-system, sans-serif", fontSize: 28, lineHeight: 1.08, fontWeight: 600, letterSpacing: "-0.018em" }}
       >
         Memory Fields Machine
       </p>
       <p
-        className="text-frost/30 lowercase mt-1.5"
-        style={{ fontFamily: '"IBM Plex Mono", "SF Mono", "Roboto Mono", monospace', fontSize: 12, lineHeight: "15px", fontWeight: 400, letterSpacing: "0.12em" }}
+        className="text-frost/40 lowercase mt-2"
+        style={{ fontFamily: '"IBM Plex Mono", "SF Mono", "Roboto Mono", monospace', fontSize: 11, lineHeight: "14px", fontWeight: 400, letterSpacing: "0.12em" }}
       >
         by advanced dreams
       </p>
