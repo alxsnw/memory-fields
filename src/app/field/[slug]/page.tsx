@@ -518,7 +518,12 @@ export default function FieldPage() {
   };
 
   if (!room) {
-    return <main className="min-h-screen flex items-center justify-center"><div className="text-subtle font-mono text-[11px]">Loading field...</div></main>;
+    return (
+      <>
+        <div className="fixed inset-0 z-[9999] pointer-events-none bg-deep" style={{ animation: 'fade-out 2s ease-out 1s forwards' }} />
+        <main className="min-h-screen flex items-center justify-center"><div className="text-subtle font-mono text-[11px]">Loading field...</div></main>
+      </>
+    );
   }
 
   const currentPreset = getPreset(journey.startPreset);
@@ -530,7 +535,7 @@ export default function FieldPage() {
   return (
     <>
       <IdleAuroraField />
-      <div className="fixed inset-0 z-[9999] pointer-events-none bg-deep" style={{ animation: 'fade-out 1.5s ease-out 0.2s forwards' }} />
+      <div className="fixed inset-0 z-[9999] pointer-events-none bg-deep" style={{ animation: 'fade-out 2s ease-out 1s forwards' }} />
       {mounted && currentTrack && isPlaying && (
         <CanvasVisualizer
           state={interpolatedState}
