@@ -53,6 +53,7 @@ export default function LandingPage() {
       });
 
       saveName(name.trim());
+      await new Promise(r => setTimeout(r, 1600));
       router.push(`/field/${slug}?clientId=${clientId}&name=${encodeURIComponent(name.trim())}`);
     } catch (err) {
       console.error("Create room error:", err);
@@ -140,6 +141,7 @@ export default function LandingPage() {
                   await supabase.from("room_state").insert({ room_id: room.id, visual_seed: Math.floor(Math.random() * 9999) });
                   await supabase.from("connected_clients").insert({ client_id: clientId, room_id: room.id, display_name: saved, role: "host" });
                   saveName(saved);
+                  await new Promise(r => setTimeout(r, 1600));
                   router.push(`/field/${slug}?clientId=${clientId}&name=${encodeURIComponent(saved)}`);
                 } catch (err) {
                   console.error(err);
