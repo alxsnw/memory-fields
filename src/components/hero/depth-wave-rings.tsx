@@ -8,10 +8,10 @@ const RINGS = [
 ];
 
 const LEGACY_RINGS = [
-  { delay: 0, duration: 13, size: 140, peakOpacity: 0.035 },
-  { delay: 4, duration: 14, size: 110, peakOpacity: 0.025 },
-  { delay: 8, duration: 12, size: 160, peakOpacity: 0.04 },
-  { delay: 12.5, duration: 15, size: 120, peakOpacity: 0.03 },
+  { delay: 0, duration: 32.5, size: 140, peakOpacity: 0.035 },
+  { delay: 10, duration: 35, size: 110, peakOpacity: 0.025 },
+  { delay: 20, duration: 30, size: 160, peakOpacity: 0.04 },
+  { delay: 31.25, duration: 37.5, size: 120, peakOpacity: 0.03 },
 ];
 
 export function DepthWaveRings() {
