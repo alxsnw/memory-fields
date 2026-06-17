@@ -112,7 +112,7 @@ export default function LandingPage() {
               }
             }}
           >
-            <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-px' : ''}`}>
+            <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-1' : ''}`}>
               Create Field
             </span>
             {creating && (
