@@ -48,13 +48,16 @@
     opacity: 0.1;
     filter: blur(0);
   }
+  30% {
+    filter: blur(0);
+  }
   60% {
     opacity: 0.15;
-    filter: blur(0);
+    filter: blur(10px);
   }
   80% {
     opacity: 0.1;
-    filter: blur(0);
+    filter: blur(30px);
   }
   100% {
     transform: scale(15);
