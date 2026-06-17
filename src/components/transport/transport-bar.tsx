@@ -71,13 +71,13 @@ export function TransportBar({
                 {currentTrack.display_name}
               </div>
             </div>
-            <div className="flex items-center gap-2 w-full">
+            <div className="flex items-center gap-2 w-full mt-4">
               <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0">
                 {formatTime(currentTime)}
               </span>
               <div
                 className={cn(
-                  "flex-1 h-[3px] rounded-full bg-white/[0.10] relative cursor-pointer timeline-hover group",
+                  "flex-1 h-[1px] rounded-full bg-white/[0.10] relative cursor-pointer timeline-hover group",
                   isHost && "cursor-pointer",
                 )}
                 onClick={(e) => {
