@@ -7,7 +7,7 @@ import { v4 as uuid } from "uuid";
 import { supabase as getSupabase } from "@/lib/supabase";
 import { getSavedName, saveName } from "@/lib/name-store";
 import { cn } from "@/lib/utils";
-import type { Room, Track, RoomState, ConnectedClient, SyncStatus } from "@/types";
+import type { Room, Track, RoomState, ConnectedClient, SyncStatus, VisualModel, PaletteMode, VisualParams } from "@/types";
 import type { JourneyState, InterpolatedState } from "@/lib/visual-journey";
 import { createJourney, tickJourney, getInterpolatedState, updateJourneyPlayState, visibilityCompensation, estimateBrightness } from "@/lib/visual-journey";
 import { getPreset, pickCompatibleNext } from "@/lib/presets";
@@ -23,6 +23,7 @@ import { CanvasVisualizer } from "@/components/visualizer/canvas-visualizer";
 import AtlasScan from "@/components/visualizer/atlas-scan";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
 import { GlitchContainer } from "@/components/ui/glitch-container";
+import { FieldControls } from "@/components/sidebar/field-controls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,7 +98,29 @@ export default function FieldPage() {
     setLatentState("active");
   }, []);
 
-  // Tune mode
+  // Field Controls handlers
+  const handleModelChange = useCallback((model: VisualModel) => {
+    if (!isHost || !room) return;
+    syncState({ visual_model: model });
+  }, [isHost, room]);
+
+  const handlePaletteChange = useCallback((mode: PaletteMode) => {
+    if (!isHost || !room) return;
+    syncState({ palette_mode: mode });
+  }, [isHost, room]);
+
+  const handleParamChange = useCallback((params: Partial<VisualParams>) => {
+    if (!isHost || !room || !roomState) return;
+    const merged = { ...roomState.visual_params, ...params };
+    syncState({ visual_params: merged });
+  }, [isHost, room, roomState]);
+
+  const handleMutate = useCallback(() => {
+    if (!isHost || !room) return;
+    syncState({ visual_seed: Math.floor(Math.random() * 9999) });
+  }, [isHost, room]);
+
+  // Tune mode (dev only)
   const [tuneMode, setTuneMode] = useState(false);
 
   // Journey controls
@@ -156,6 +179,19 @@ export default function FieldPage() {
     const comp = visibilityCompensation(raw, false);
     return comp.state;
   });
+
+  const isDev = searchParams.get("dev") === "true";
+
+  const defaultVisualParams: VisualParams = {
+    intensity: 0.5, density: 0.5, speed: 0.5, memory: 0.5, detail: 0.5,
+    glow: 0.5, randomness: 0.5, smoothing: true, smoothingAmount: 0.3,
+    coreSize: 0.5, expansion: 0.5, edgeReactivity: 0.5, centerBias: 0.5,
+    bloom: 0.3, grain: 0, grainIntensity: 0.5, grainSize: 0.5,
+    chromatic: 0.2, scanlines: 0, vignette: 0.3, crtCurve: 0, phosphor: 0,
+  };
+  const visualParams = roomState?.visual_params
+    ? ({ ...defaultVisualParams, ...roomState.visual_params }) as VisualParams
+    : defaultVisualParams;
 
   const currentTrack = tracks.find((t) => t.id === roomState?.current_track_id) || null;
   const sortedTracks = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
@@ -547,73 +583,87 @@ export default function FieldPage() {
       </GlitchContainer>
 
       <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl p-4 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto">
-        <div className="space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">Visual Journey</span>
-              <span className="font-mono text-[9px] text-frost/40">{currentPreset.name}</span>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[9px] text-subtle">→ {targetPreset.name}</span>
-                <span className="font-mono text-[9px] text-frost/50">{journeyProgress.toFixed(1)}%</span>
+        {isDev ? (
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">Visual Journey</span>
+                <span className="font-mono text-[9px] text-frost/40">{currentPreset.name}</span>
               </div>
-              <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
-                <div className="h-full rounded-full bg-brass transition-all duration-1000" style={{ width: `${journeyProgress}%` }} />
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleToggleBoost}>
-              {visibilityBoost ? "Boost" : "NoBoost"}
-            </Button>
-            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", showAtlasScan && "text-cyan/70")} onClick={() => setShowAtlasScan((v) => !v)}>
-              Atlas
-            </Button>
-            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", glitchEnabled && "text-violet/70")} onClick={() => setGlitchEnabled((v) => !v)}>
-              Glitch
-            </Button>
-            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", tuneMode && "text-amber/70")} onClick={() => setTuneMode((v) => !v)}>
-              Tune
-            </Button>
-            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => setShowDebug((v) => !v)}>
-              {showDebug ? "Hide" : "Dbg"}
-            </Button>
-            <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleExport}>
-              PNG
-            </Button>
-          </div>
-          {tuneMode && (
-            <div className="border-t border-white/[0.06] pt-3">
-              <VisualizerDebug
-                journey={journey}
-                interpolatedState={interpolatedState}
-                analyserNode={analyserRef.current}
-                onNextPreset={handleNextPreset}
-                onJumpTo={handleJumpTo}
-                onCompleteTransition={handleCompleteTransition}
-                onSetDuration={handleSetDuration}
-              />
-            </div>
-          )}
-          {showDebug && (
-            <div className="space-y-1.5 font-mono text-[9px] text-frost/50">
-              <div>room seed: {roomSeed.current}</div>
-              <div>phase: {journey.phase}</div>
-              <div>palette: {interpolatedState.palette.join(", ")}</div>
-              <div>layers — m: {interpolatedState.membraneAmount.toFixed(2)} t: {interpolatedState.topographyAmount.toFixed(2)} p: {interpolatedState.particleAmount.toFixed(2)} g: {interpolatedState.gridAmount.toFixed(2)}</div>
-              <div>glow: {interpolatedState.glow.toFixed(2)} blur: {interpolatedState.blur.toFixed(2)} speed: {interpolatedState.speed.toFixed(2)}</div>
-              <div>audio sens: {interpolatedState.audioSensitivity.toFixed(2)}</div>
-              <div className="border-t border-white/[0.06] pt-1 mt-2">
-                <div className={cn("text-[8px]", compActive ? "text-cyan/60" : "text-frost/30")}>
-                  visibility comp: {compActive ? "ACTIVE" : "inactive"}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[9px] text-subtle">→ {targetPreset.name}</span>
+                  <span className="font-mono text-[9px] text-frost/50">{journeyProgress.toFixed(1)}%</span>
                 </div>
-                <div>brightness: {estimateBrightness(interpolatedState).toFixed(3)}</div>
-                <div>boost: {visibilityBoost ? "ON" : "OFF"}</div>
+                <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
+                  <div className="h-full rounded-full bg-brass transition-all duration-1000" style={{ width: `${journeyProgress}%` }} />
+                </div>
               </div>
             </div>
-          )}
-        </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleToggleBoost}>
+                {visibilityBoost ? "Boost" : "NoBoost"}
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", showAtlasScan && "text-cyan/70")} onClick={() => setShowAtlasScan((v) => !v)}>
+                Atlas
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", glitchEnabled && "text-violet/70")} onClick={() => setGlitchEnabled((v) => !v)}>
+                Glitch
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", tuneMode && "text-amber/70")} onClick={() => setTuneMode((v) => !v)}>
+                Tune
+              </Button>
+              <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => setShowDebug((v) => !v)}>
+                {showDebug ? "Hide" : "Dbg"}
+              </Button>
+              <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => handleExport("png")}>
+                PNG
+              </Button>
+            </div>
+            {tuneMode && (
+              <div className="border-t border-white/[0.06] pt-3">
+                <VisualizerDebug
+                  journey={journey}
+                  interpolatedState={interpolatedState}
+                  analyserNode={analyserRef.current}
+                  onNextPreset={handleNextPreset}
+                  onJumpTo={handleJumpTo}
+                  onCompleteTransition={handleCompleteTransition}
+                  onSetDuration={handleSetDuration}
+                />
+              </div>
+            )}
+            {showDebug && (
+              <div className="space-y-1.5 font-mono text-[9px] text-frost/50">
+                <div>room seed: {roomSeed.current}</div>
+                <div>phase: {journey.phase}</div>
+                <div>palette: {interpolatedState.palette.join(", ")}</div>
+                <div>layers — m: {interpolatedState.membraneAmount.toFixed(2)} t: {interpolatedState.topographyAmount.toFixed(2)} p: {interpolatedState.particleAmount.toFixed(2)} g: {interpolatedState.gridAmount.toFixed(2)}</div>
+                <div>glow: {interpolatedState.glow.toFixed(2)} blur: {interpolatedState.blur.toFixed(2)} speed: {interpolatedState.speed.toFixed(2)}</div>
+                <div>audio sens: {interpolatedState.audioSensitivity.toFixed(2)}</div>
+                <div className="border-t border-white/[0.06] pt-1 mt-2">
+                  <div className={cn("text-[8px]", compActive ? "text-cyan/60" : "text-frost/30")}>
+                    visibility comp: {compActive ? "ACTIVE" : "inactive"}
+                  </div>
+                  <div>brightness: {estimateBrightness(interpolatedState).toFixed(3)}</div>
+                  <div>boost: {visibilityBoost ? "ON" : "OFF"}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <FieldControls
+            visualModel={roomState?.visual_model || "signal-field"}
+            paletteMode={roomState?.palette_mode || "mineral"}
+            visualParams={visualParams}
+            isHost={isHost}
+            onModelChange={handleModelChange}
+            onPaletteChange={handlePaletteChange}
+            onParamChange={handleParamChange}
+            onMutate={handleMutate}
+            onExport={handleExport}
+          />
+        )}
       </aside>
 
       <GlitchContainer active={glitchEnabled} frequency={0.001}>
