@@ -61,8 +61,11 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden transition-[background-color] duration-[400ms] ease-out"
-      style={{ backgroundColor: buttonHover ? '#111318' : '#06070A' }}>
+    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden transition-[background-color] ease-out"
+      style={{
+        backgroundColor: creating ? '#090A0B' : buttonHover ? '#111318' : '#06070A',
+        transitionDuration: creating ? '800ms' : '400ms',
+      }}>
       <DepthWaveRings />
 
       <div className="relative z-10 text-center max-w-lg">
