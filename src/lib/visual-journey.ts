@@ -33,7 +33,25 @@ export interface InterpolatedState {
   fieldScale: number;
 }
 
-export const MIN_VALUES = {
+type NumericInterpolatedKey =
+  | "glow"
+  | "blur"
+  | "density"
+  | "speed"
+  | "randomness"
+  | "membraneAmount"
+  | "topographyAmount"
+  | "particleAmount"
+  | "gridAmount"
+  | "lineDensity"
+  | "fieldScale"
+  | "audioSensitivity"
+  | "bassSensitivity"
+  | "midSensitivity"
+  | "highSensitivity"
+  | "colorDrift";
+
+const MIN_VALUES: Partial<Record<NumericInterpolatedKey, number>> = {
   glow: 0.25,
   membraneAmount: 0.15,
   topographyAmount: 0.12,
@@ -44,6 +62,8 @@ export const MIN_VALUES = {
   audioSensitivity: 0.12,
   fieldScale: 0.35,
 };
+
+const VISIBILITY_NUMERIC_KEYS = Object.keys(MIN_VALUES) as NumericInterpolatedKey[];
 
 type LayerKey = "membraneAmount" | "topographyAmount" | "particleAmount" | "gridAmount";
 const LAYER_KEYS: LayerKey[] = ["membraneAmount", "topographyAmount", "particleAmount", "gridAmount"];
@@ -73,9 +93,11 @@ export function visibilityCompensation(state: InterpolatedState, isPlaying: bool
   let active = false;
   const c = { ...state };
 
-  for (const k of Object.keys(MIN_VALUES) as (keyof InterpolatedState)[]) {
-    if (k in MIN_VALUES && c[k] < MIN_VALUES[k as keyof typeof MIN_VALUES]) {
-      c[k] = MIN_VALUES[k as keyof typeof MIN_VALUES];
+  for (const k of VISIBILITY_NUMERIC_KEYS) {
+    const min = MIN_VALUES[k];
+    const val = c[k];
+    if (typeof min === "number" && val < min) {
+      c[k] = min;
       active = true;
     }
   }
