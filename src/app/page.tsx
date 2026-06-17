@@ -97,10 +97,18 @@ export default function LandingPage() {
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone">v0.1</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl font-medium tracking-tight text-frost mb-3">
+        <h1 className="text-4xl sm:text-5xl font-medium tracking-tight text-frost mb-3" style={{
+          opacity: creating ? 1 : 0,
+          transform: creating ? 'translateX(0)' : 'translateX(-20px)',
+          transition: 'opacity 200ms ease-out, transform 200ms ease-out',
+        }}>
           Memory Fields
         </h1>
-        <p className="text-sm text-stone font-mono uppercase tracking-[0.12em] mb-8 lowercase">
+        <p className="text-sm text-stone font-mono uppercase tracking-[0.12em] mb-8 lowercase" style={{
+          opacity: creating ? 1 : 0,
+          transform: creating ? 'translateY(0)' : 'translateY(15px)',
+          transition: 'opacity 300ms ease-out, transform 300ms ease-out',
+        }}>
           by advanced dreams
         </p>
 
