@@ -118,32 +118,22 @@ export function TransportBar({
         )}
       </div>
 
-      {/* Right zone: NEXT */}
-      <div className="w-[150px] shrink-0 text-right">
-        {nextTrack ? (
-          <>
-            <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-frost/32 mb-0.5">
-              Next
-            </div>
-            <div className="flex items-center justify-end gap-1.5">
-              <span className="text-[11px] text-soft/50 truncate max-w-[110px]">
-                {nextTrack.display_name}
-              </span>
-              <button
-                onClick={onNext}
-                disabled={!isHost}
-                className="shrink-0 p-0.5 rounded hover:bg-white/[0.06] transition-colors disabled:opacity-30"
-              >
-                <SkipForward className="w-3.5 h-3.5 text-frost/40" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-frost/20">
-            Next
+      {/* Right zone: NEXT or spacer for balance */}
+      {nextTrack ? (
+        <div className="w-[140px] shrink-0 flex items-center justify-end gap-2">
+          <span className="text-[11px] text-soft/50 truncate max-w-[90px]">
+            {nextTrack.display_name}
+          </span>
+          <div className="flex flex-col items-end">
+            <span className="font-mono text-[8px] uppercase tracking-[0.08em] text-frost/32 leading-none mb-0.5">Next</span>
+            <button onClick={onNext} disabled={!isHost} className="p-0.5 rounded hover:bg-white/[0.06] transition-colors disabled:opacity-30">
+              <SkipForward className="w-3.5 h-3.5 text-frost/40" />
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="w-[60px] shrink-0" />
+      )}
     </div>
   );
 }
