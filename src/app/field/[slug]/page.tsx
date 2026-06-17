@@ -530,6 +530,7 @@ export default function FieldPage() {
   return (
     <>
       <IdleAuroraField />
+      <div className="fixed inset-0 z-[9999] pointer-events-none bg-deep" style={{ animation: 'fade-out 1.5s ease-out 0.2s forwards' }} />
       {mounted && currentTrack && isPlaying && (
         <CanvasVisualizer
           state={interpolatedState}

@@ -91,6 +91,15 @@ export default function LandingPage() {
       </div>
       <DepthWaveRings />
 
+      <div
+        className="fixed inset-0 z-50 pointer-events-none transition-opacity ease-out"
+        style={{
+          backgroundColor: '#06070A',
+          opacity: creating ? 1 : 0,
+          transitionDuration: '1.5s',
+        }}
+      />
+
       <div className="relative z-10 text-center max-w-lg">
         <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.06] bg-white/[0.03]">
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone">v0.1</span>

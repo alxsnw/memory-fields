@@ -113,6 +113,11 @@
   }
 }
 
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @keyframes laser-sweep {
   0% { left: -35%; opacity: 0; }
   8% { opacity: 1; }
