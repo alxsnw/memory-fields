@@ -16,7 +16,6 @@ import { VisualizerDebug } from "@/components/debug/visualizer-debug";
 
 import Brand from "@/components/sidebar/brand";
 import UploadCapsule from "@/components/sidebar/upload-capsule";
-import NowPlaying from "@/components/sidebar/now-playing";
 import { MemoryArchive } from "@/components/archive/memory-archive";
 import { TransportBar } from "@/components/transport/transport-bar";
 import { CanvasVisualizer } from "@/components/visualizer/canvas-visualizer";
@@ -374,9 +373,22 @@ export default function FieldPage() {
       if (sourceRef.current) return;
       setupAudioGraph(audio);
     });
-    audio.addEventListener("ended", () => {
+    audio.addEventListener("ended", async () => {
       setIsPlaying(false);
-      syncState({ is_playing: false, seek_position: 0 });
+      // Auto-advance to next track
+      const sorted = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+      const idx = sorted.findIndex(t => t.id === roomState?.current_track_id);
+      if (idx < sorted.length - 1 && isHost) {
+        const next = sorted[idx + 1];
+        if (room) {
+          await supabase.from("room_state").upsert(
+            { room_id: room.id, current_track_id: next.id, is_playing: true, seek_position: 0 },
+            { onConflict: "room_id" },
+          );
+        }
+      } else {
+        syncState({ is_playing: false, seek_position: 0 });
+      }
     });
 
     return () => {
@@ -607,14 +619,9 @@ export default function FieldPage() {
             <Brand />
 
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
-            {tracks.length > 0 && (
-              <div className="mt-3 mb-3" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
-                <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
-              </div>
-            )}
           </div>
           {tracks.length > 0 && (
-            <div style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
+            <div className="flex-1 min-h-0 mt-4" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
               <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
             </div>
           )}

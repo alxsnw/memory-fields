@@ -59,28 +59,19 @@ export function TransportBar({
         </button>
       </div>
 
-      {/* Center zone: NOW PLAYING + progress */}
-      <div className="flex-1 min-w-[280px]">
+      {/* Center zone: NOW PLAYING + track name + progress */}
+      <div className="flex-1 min-w-[280px] flex flex-col items-center">
         {currentTrack ? (
           <>
-            <div className="flex items-center gap-3 mb-0.5">
-              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-brass/80">
+            <div className="flex flex-col items-center mb-0.5">
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-brass/80 mb-0.5">
                 Now Playing
               </span>
-              <span className={cn(
-                "font-mono text-[8px] uppercase tracking-[0.08em] px-1.5 py-[1px] rounded-full border",
-                syncColors[syncStatus],
-                syncStatus === "synced" ? "border-success/20 bg-success/6" :
-                syncStatus === "buffering" ? "border-brass/20 bg-brass/6" :
-                "border-error/20 bg-error/6",
-              )}>
-                {syncStatus}
-              </span>
+              <div className="text-[13px] leading-4 font-medium text-frost truncate text-center">
+                {currentTrack.display_name}
+              </div>
             </div>
-            <div className="text-[13px] leading-4 font-medium text-frost truncate mb-1">
-              {currentTrack.display_name}
-            </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0">
                 {formatTime(currentTime)}
               </span>
@@ -117,6 +108,21 @@ export function TransportBar({
           </div>
         )}
       </div>
+
+      {/* Sync status label - top right corner */}
+      {currentTrack && (
+        <div className="absolute top-4 right-4">
+          <span className={cn(
+            "font-mono text-[8px] uppercase tracking-[0.08em] px-1.5 py-[1px] rounded-full border",
+            syncColors[syncStatus],
+            syncStatus === "synced" ? "border-success/20 bg-success/6" :
+            syncStatus === "buffering" ? "border-brass/20 bg-brass/6" :
+            "border-error/20 bg-error/6",
+          )}>
+            {syncStatus}
+          </span>
+        </div>
+      )}
 
       {/* Right zone: NEXT or spacer for balance */}
       {nextTrack ? (
