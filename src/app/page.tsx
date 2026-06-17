@@ -117,9 +117,9 @@ export default function LandingPage() {
             </span>
             {creating && (
               <span className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0s' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0.2s' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.6s ease-in-out infinite', animationDelay: '0.4s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.3s ease-in-out infinite', animationDelay: '0s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.3s ease-in-out infinite', animationDelay: '0.1s' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 0.3s ease-in-out infinite', animationDelay: '0.2s' }} />
               </span>
             )}
           </Button>
