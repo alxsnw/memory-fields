@@ -10,7 +10,9 @@ import { cn } from "@/lib/utils";
 import type { Room, Track, RoomState, ConnectedClient, SyncStatus } from "@/types";
 import type { JourneyState, InterpolatedState } from "@/lib/visual-journey";
 import { createJourney, tickJourney, getInterpolatedState, updateJourneyPlayState, visibilityCompensation, estimateBrightness } from "@/lib/visual-journey";
-import { getPreset } from "@/lib/presets";
+import { getPreset, pickCompatibleNext } from "@/lib/presets";
+import { LatentFieldEngine } from "@/lib/latent-field";
+import { VisualizerDebug } from "@/components/debug/visualizer-debug";
 
 import Brand from "@/components/sidebar/brand";
 import UploadCapsule from "@/components/sidebar/upload-capsule";
@@ -81,6 +83,66 @@ export default function FieldPage() {
     });
   }, []);
 
+  // Latent field
+  const [latentState, setLatentState] = useState<"dormant" | "active" | "absorbed">("dormant");
+  const latentStateRef = useRef(latentState);
+  latentStateRef.current = latentState;
+  const latentRef = useRef<LatentFieldEngine | null>(null);
+
+  const handleWakeField = useCallback(() => {
+    if (latentRef.current?.isActive) return;
+    const engine = new LatentFieldEngine();
+    engine.wake();
+    latentRef.current = engine;
+    setLatentState("active");
+  }, []);
+
+  // Tune mode
+  const [tuneMode, setTuneMode] = useState(false);
+
+  // Journey controls
+  const handleNextPreset = useCallback(() => {
+    setJourney((prev) => {
+      const next = pickCompatibleNext(prev.targetPreset, prev.roomSeed + 1);
+      return {
+        ...prev,
+        startPreset: prev.targetPreset,
+        targetPreset: next,
+        startTime: Date.now(),
+        transitionDuration: 300000,
+        progress: 0,
+        phase: "transitioning",
+      };
+    });
+  }, []);
+
+  const handleJumpTo = useCallback((target: number) => {
+    setJourney((prev) => ({
+      ...prev,
+      startTime: Date.now() - (prev.transitionDuration * target / 100),
+      phase: "transitioning",
+    }));
+  }, []);
+
+  const handleCompleteTransition = useCallback(() => {
+    setJourney((prev) => ({
+      ...prev,
+      startTime: 0,
+      transitionDuration: 1,
+      progress: 1,
+      phase: "transitioning",
+    }));
+  }, []);
+
+  const handleSetDuration = useCallback((ms: number) => {
+    setJourney((prev) => ({
+      ...prev,
+      startTime: Date.now(),
+      transitionDuration: ms,
+      phase: "transitioning",
+    }));
+  }, []);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -128,8 +190,19 @@ export default function FieldPage() {
     });
   }, [isPlaying]);
 
+  // Cleanup latent field on unmount
+  useEffect(() => {
+    return () => {
+      latentRef.current?.sleep();
+    };
+  }, []);
+
   function applyInterpolatedState(j: JourneyState, playing: boolean) {
     const raw = getInterpolatedState(j);
+    const mod = latentRef.current?.modulation;
+    if (mod && latentStateRef.current === "active" && !playing) {
+      raw.glow = Math.min(1, raw.glow + 0.04 * mod.breath + 0.02 * mod.shimmer);
+    }
     if (visibilityBoostRef.current) {
       const comp = visibilityCompensation(raw, playing);
       setInterpolatedState(comp.state);
@@ -303,6 +376,11 @@ export default function FieldPage() {
       return;
     }
 
+    if (latentRef.current) {
+      latentRef.current.fadeOut();
+      setLatentState("absorbed");
+    }
+
     setIsPlaying(true);
     syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: el.currentTime });
   };
@@ -319,6 +397,7 @@ export default function FieldPage() {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     setIsPlaying(false);
     setCurrentTime(0);
+    if (latentState === "dormant") handleWakeField();
     const supabase = getClient();
     await supabase.from("room_state").upsert(
       { room_id: room.id, current_track_id: track.id, is_playing: false, seek_position: 0 },
@@ -329,6 +408,7 @@ export default function FieldPage() {
 
   const handleUpload = async (file: File) => {
     if (!room) return;
+    if (latentState === "dormant") handleWakeField();
     setUploading(true);
     setUploadProgress(0);
     try {
@@ -438,6 +518,25 @@ export default function FieldPage() {
         <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-4 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col">
           <div className="shrink-0">
             <Brand />
+
+            {latentState === "dormant" && (
+              <button onClick={handleWakeField} className="w-full mt-3 py-[10px] rounded-2xl border border-white/[0.08] bg-white/[0.02] text-center hover:bg-white/[0.04] transition-colors">
+                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-frost/50">FIELD DORMANT</div>
+                <div className="font-mono text-[8px] text-frost/30 mt-1">Tap to wake</div>
+              </button>
+            )}
+            {latentState === "active" && (
+              <div className="w-full mt-3 py-[10px] rounded-2xl border border-cyan/12 bg-cyan/[0.03] text-center">
+                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-cyan/50 animate-pulse">LATENT FIELD ACTIVE</div>
+                <div className="font-mono text-[8px] text-frost/40 mt-1">Waiting for signal</div>
+              </div>
+            )}
+            {latentState === "absorbed" && (
+              <div className="w-full mt-2 text-center">
+                <div className="font-mono text-[9px] uppercase tracking-[0.08em] text-cyan/30">Signal absorbed</div>
+              </div>
+            )}
+
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
             <div className="mt-5 mb-5">
               <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
@@ -474,6 +573,9 @@ export default function FieldPage() {
             <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", glitchEnabled && "text-violet/70")} onClick={() => setGlitchEnabled((v) => !v)}>
               Glitch
             </Button>
+            <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", tuneMode && "text-amber/70")} onClick={() => setTuneMode((v) => !v)}>
+              Tune
+            </Button>
             <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => setShowDebug((v) => !v)}>
               {showDebug ? "Hide" : "Dbg"}
             </Button>
@@ -481,6 +583,19 @@ export default function FieldPage() {
               PNG
             </Button>
           </div>
+          {tuneMode && (
+            <div className="border-t border-white/[0.06] pt-3">
+              <VisualizerDebug
+                journey={journey}
+                interpolatedState={interpolatedState}
+                analyserNode={analyserRef.current}
+                onNextPreset={handleNextPreset}
+                onJumpTo={handleJumpTo}
+                onCompleteTransition={handleCompleteTransition}
+                onSetDuration={handleSetDuration}
+              />
+            </div>
+          )}
           {showDebug && (
             <div className="space-y-1.5 font-mono text-[9px] text-frost/50">
               <div>room seed: {roomSeed.current}</div>
