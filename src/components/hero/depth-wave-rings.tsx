@@ -1,11 +1,10 @@
 "use client";
 
 const RINGS = [
-  { delay: 0, duration: 10, size: 180, startOpacity: 0.06 },
-  { delay: 2.8, duration: 11, size: 140, startOpacity: 0.05 },
-  { delay: 5.5, duration: 9.5, size: 200, startOpacity: 0.08 },
-  { delay: 8.3, duration: 12, size: 120, startOpacity: 0.04 },
-  { delay: 11, duration: 10.5, size: 160, startOpacity: 0.07 },
+  { delay: 0, duration: 13, size: 130, peakOpacity: 0.035 },
+  { delay: 4, duration: 14, size: 100, peakOpacity: 0.025 },
+  { delay: 8, duration: 12, size: 150, peakOpacity: 0.04 },
+  { delay: 12.5, duration: 15, size: 110, peakOpacity: 0.03 },
 ];
 
 export function DepthWaveRings() {
@@ -14,15 +13,15 @@ export function DepthWaveRings() {
       {RINGS.map((ring, i) => (
         <div
           key={i}
-          className="absolute top-1/2 left-1/2 rounded-full border border-white"
+          className="absolute top-1/2 left-1/2 rounded-full border border-white/60"
           style={{
             width: ring.size,
             height: ring.size,
             marginLeft: -ring.size / 2,
             marginTop: -ring.size / 2,
-            opacity: ring.startOpacity,
-            borderWidth: 1,
-            animation: `depth-wave ${ring.duration}s cubic-bezier(0.18, 0.46, 0.12, 1) infinite`,
+            opacity: ring.peakOpacity,
+            borderWidth: 0.5,
+            animation: `depth-wave ${ring.duration}s ease-out infinite`,
             animationDelay: `${ring.delay}s`,
           }}
         />

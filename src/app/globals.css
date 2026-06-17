@@ -41,17 +41,22 @@
 
 @keyframes depth-wave {
   0% {
-    transform: scale(0.15);
+    transform: scale(0.02);
     opacity: 1;
     filter: blur(0px);
   }
-  60% {
-    filter: blur(0.5px);
+  20% {
+    opacity: 1;
+    filter: blur(0.3px);
+  }
+  50% {
+    opacity: 0.2;
+    filter: blur(1px);
   }
   100% {
-    transform: scale(3);
+    transform: scale(15);
     opacity: 0;
-    filter: blur(2px);
+    filter: blur(4px);
   }
 }
 
