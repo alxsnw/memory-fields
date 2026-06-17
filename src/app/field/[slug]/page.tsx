@@ -569,13 +569,25 @@ export default function FieldPage() {
 
   const handleSelectTrack = async (track: Track) => {
     if (!isHost || !room) return;
+    
+    // If clicking on already active track, toggle play/pause
+    if (track.id === roomState?.current_track_id) {
+      if (isPlaying) {
+        handlePlayPause();
+      } else {
+        handlePlayPause();
+      }
+      return;
+    }
+    
+    // Switch to new track and start playing
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     setIsPlaying(false);
     setCurrentTime(0);
     if (latentState === "dormant") handleWakeField();
     const supabase = getClient();
     await supabase.from("room_state").upsert(
-      { room_id: room.id, current_track_id: track.id, is_playing: false, seek_position: 0 },
+      { room_id: room.id, current_track_id: track.id, is_playing: true, seek_position: 0 },
       { onConflict: "room_id" },
     );
     await supabase.from("tracks").update({ last_played_at: new Date().toISOString() }).eq("id", track.id);
@@ -705,9 +717,15 @@ export default function FieldPage() {
             <Brand />
 
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
+            
+            {/* Mini-manifest */}
+            <p className="mt-3 mb-8 text-[10.5px] leading-[1.4] text-frost/42 max-w-[280px]">
+              Memory Fields listens to sound as a living archive.
+              Each track becomes a temporary room of motion, color and memory.
+            </p>
           </div>
           {tracks.length > 0 && (
-            <div className="flex-1 min-h-0 mt-12 mb-8" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
+            <div className="flex-1 min-h-0 mb-8" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
               <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
             </div>
           )}
