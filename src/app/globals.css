@@ -46,16 +46,20 @@
   0% {
     transform: scale(0.02);
     opacity: 1;
+    border-width: 1px;
   }
   60% {
     opacity: 0.12;
+    border-width: 0.2px;
   }
   80% {
     opacity: 0.2;
+    border-width: 0.05px;
   }
   100% {
     transform: scale(15);
     opacity: 0;
+    border-width: 0.007px;
   }
 }
 
