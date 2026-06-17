@@ -39,6 +39,22 @@
   from { width: 0%; }
 }
 
+@keyframes depth-wave {
+  0% {
+    transform: scale(0.15);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  60% {
+    filter: blur(0.5px);
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+
 @keyframes laser-sweep {
   0% { left: -35%; opacity: 0; }
   8% { opacity: 1; }
