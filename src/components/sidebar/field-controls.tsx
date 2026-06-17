@@ -108,8 +108,8 @@ export function FieldControls({
           <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} disabled />
         </Section>
 
-        {/* Processing */}
-        <Section title="Processing" defaultOpen={false}>
+        {/* Processing - hidden for now */}
+        {false && <Section title="Processing" defaultOpen={false}>
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-subtle">Smoothing</span>
             <button
@@ -133,10 +133,10 @@ export function FieldControls({
           <FieldSlider label="Expansion" value={scale(visualParams.expansion)} onChange={(v) => onParamChange({ expansion: unscale(v) })} />
           <FieldSlider label="Edge Reactivity" value={scale(visualParams.edgeReactivity)} onChange={(v) => onParamChange({ edgeReactivity: unscale(v) })} />
           <FieldSlider label="Center Bias" value={scale(visualParams.centerBias)} onChange={(v) => onParamChange({ centerBias: unscale(v) })} />
-        </Section>
+        </Section>}
 
-        {/* Post-Processing */}
-        <Section title="Post-Processing" defaultOpen={false}>
+        {/* Post-Processing - hidden for now */}
+        {false && <Section title="Post-Processing" defaultOpen={false}>
           <FieldSlider label="Bloom" value={scale(visualParams.bloom)} onChange={(v) => onParamChange({ bloom: unscale(v) })} />
           <FieldSlider label="Grain" value={scale(visualParams.grain)} onChange={(v) => onParamChange({ grain: unscale(v) })} />
           {visualParams.grain > 0 && (
@@ -150,10 +150,10 @@ export function FieldControls({
           <FieldSlider label="Vignette" value={scale(visualParams.vignette)} onChange={(v) => onParamChange({ vignette: unscale(v) })} />
           <FieldSlider label="CRT Curve" value={scale(visualParams.crtCurve)} onChange={(v) => onParamChange({ crtCurve: unscale(v) })} />
           <FieldSlider label="Phosphor" value={scale(visualParams.phosphor)} onChange={(v) => onParamChange({ phosphor: unscale(v) })} />
-        </Section>
+        </Section>}
 
-        {/* Variation */}
-        <Section title="Variation" defaultOpen={false}>
+        {/* Variation - hidden for now */}
+        {false && <Section title="Variation" defaultOpen={false}>
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-subtle">Seed</span>
             <span className="font-mono text-[10px] text-frost/60">{visualParams.randomness}</span>
@@ -168,10 +168,10 @@ export function FieldControls({
             <Shuffle className="w-3 h-3 mr-1.5" />
             Mutate Field
           </Button>
-        </Section>
+        </Section>}
 
-        {/* Export */}
-        <Section title="Export" defaultOpen={false}>
+        {/* Export - hidden for now */}
+        {false && <Section title="Export" defaultOpen={false}>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono" onClick={() => onExport("png")}>
               PNG
@@ -188,7 +188,7 @@ export function FieldControls({
               Video
             </Button>
           </div>
-        </Section>
+        </Section>}
       </div>
     </div>
   );

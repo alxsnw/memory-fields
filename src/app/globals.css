@@ -136,6 +136,11 @@
   50% { opacity: 0.5; }
 }
 
+@keyframes sidebar-fade-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .plasma-glow {
   animation: plasma-drift 14s ease-in-out infinite;
 }

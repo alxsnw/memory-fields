@@ -580,11 +580,17 @@ export default function FieldPage() {
             <Brand />
 
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
-            <div className="mt-3 mb-3">
-              <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
-            </div>
+            {tracks.length > 0 && (
+              <div className="mt-3 mb-3" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
+                <NowPlaying track={currentTrack ? { display_name: currentTrack.display_name, duration: currentTrack.duration || 0 } : null} currentTime={currentTime} isPlaying={isPlaying} />
+              </div>
+            )}
           </div>
-          <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
+          {tracks.length > 0 && (
+            <div style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
+              <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
+            </div>
+          )}
         </aside>
       </GlitchContainer>
 
