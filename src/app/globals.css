@@ -67,6 +67,23 @@
   }
 }
 
+@keyframes depth-wave-legacy {
+  0% {
+    transform: scale(0.02);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.12;
+  }
+  80% {
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(15);
+    opacity: 0;
+  }
+}
+
 @keyframes laser-sweep {
   0% { left: -35%; opacity: 0; }
   8% { opacity: 1; }
