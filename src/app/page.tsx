@@ -61,8 +61,8 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
-      style={{ backgroundColor: buttonHover ? '#161616' : undefined }}>
+    <main className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden transition-[background-color] duration-[400ms] ease-out"
+      style={{ backgroundColor: buttonHover ? '#111318' : '#06070A' }}>
       <DepthWaveRings />
 
       <div className="relative z-10 text-center max-w-lg">
@@ -85,7 +85,7 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
-            className="relative !bg-[#07080A] border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-white !font-normal tracking-normal transition-[border-color,background,color,padding] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:!px-[22.4px] hover:!py-[11.2px] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px]"
+            className="relative !bg-[#07080A] border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-white !font-normal tracking-normal transition-[border-color,background,color,padding] duration-[400ms] ease-out hover:bg-white/[0.04] hover:!text-white hover:!px-6 hover:!py-3 active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px]"
             onMouseEnter={() => setButtonHover(true)}
             onMouseLeave={() => setButtonHover(false)}
             onClick={async () => {
