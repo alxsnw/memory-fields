@@ -45,17 +45,15 @@
 @keyframes depth-wave {
   0% {
     transform: scale(0.02);
-    opacity: 0.001;
+    opacity: 0.1;
     border-width: 1px;
   }
-  30% {
-    opacity: 0.005;
-  }
   60% {
-    opacity: 0.005;
+    opacity: 0.15;
     border-width: 0.2px;
   }
   80% {
+    opacity: 0.1;
     border-width: 0.05px;
   }
   100% {
