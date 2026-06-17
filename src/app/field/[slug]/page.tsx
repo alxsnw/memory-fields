@@ -375,11 +375,12 @@ export default function FieldPage() {
     });
     audio.addEventListener("ended", async () => {
       setIsPlaying(false);
-      // Auto-advance to next track
+      // Auto-advance to next track (with loop)
       const sorted = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
       const idx = sorted.findIndex(t => t.id === roomState?.current_track_id);
-      if (idx < sorted.length - 1 && isHost) {
-        const next = sorted[idx + 1];
+      if (isHost && sorted.length > 0) {
+        const nextIdx = idx < sorted.length - 1 ? idx + 1 : 0; // Loop back to first track
+        const next = sorted[nextIdx];
         if (room) {
           await supabase.from("room_state").upsert(
             { room_id: room.id, current_track_id: next.id, is_playing: true, seek_position: 0 },
