@@ -83,7 +83,7 @@ export default function LandingPage() {
         <div className="flex flex-col items-center gap-4">
           <Button
             size="lg"
-            className="w-48 !bg-transparent border border-white/[0.10] rounded-full !h-auto px-3 py-2.5 !text-frost/40 !font-normal tracking-normal transition-[border-color,background,color] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:border-white/[0.18] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
+            className="!bg-transparent border border-white/[0.10] rounded-full !h-auto px-5 py-2.5 !text-frost/40 !font-normal tracking-normal transition-[border-color,background,color] duration-200 ease-out hover:bg-white/[0.04] hover:!text-white hover:border-white/[0.18] active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px] active:!scale-100"
             onClick={async () => {
               const saved = getSavedName();
               if (saved) {
