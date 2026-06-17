@@ -46,17 +46,21 @@
   0% {
     transform: scale(0.02);
     opacity: 0.1;
+    filter: blur(0);
   }
   60% {
     opacity: 0.15;
+    filter: blur(0);
   }
   80% {
     opacity: 0.1;
+    filter: blur(0);
   }
   100% {
     transform: scale(15);
     opacity: 0;
     border-width: 0.02px;
+    filter: blur(60px);
   }
 }
 
