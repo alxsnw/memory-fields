@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DepthWaveRings } from "@/components/hero/depth-wave-rings";
+import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,16 @@ export default function LandingPage() {
           transitionDuration: '400ms',
         }}
       />
+      <div
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{
+          opacity: creating ? 1 : 0,
+          transform: 'scale(0.5)',
+          transition: 'opacity 1.5s ease-out',
+        }}
+      >
+        <IdleAuroraField />
+      </div>
       <DepthWaveRings />
 
       <div className="relative z-10 text-center max-w-lg">
