@@ -614,14 +614,14 @@ export default function FieldPage() {
       </Dialog>
 
       <GlitchContainer active={glitchEnabled} frequency={0.0008}>
-        <aside className="fixed top-8 left-8 bottom-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col" style={{ animation: 'sidebar-slide-in 0.6s ease-out 1.2s forwards', opacity: 0 }}>
+        <aside className="fixed top-8 left-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col" style={{ animation: 'sidebar-slide-in 0.6s ease-out 1.2s forwards', opacity: 0, bottom: tracks.length > 0 ? 'auto' : '2rem', paddingBottom: tracks.length > 0 ? '0' : '0.75rem' }}>
           <div className="shrink-0">
             <Brand />
 
             <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
           </div>
           {tracks.length > 0 && (
-            <div className="flex-1 min-h-0 mt-4" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
+            <div className="flex-1 min-h-0 mt-12 mb-8" style={{ animation: 'sidebar-fade-in 280ms ease-out forwards' }}>
               <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
             </div>
           )}

@@ -27,7 +27,7 @@ export function TrackRow({ track, index, isSelected, isPlaying, isHost, isArchiv
     <button
       onClick={isHost && track.status === "ready" ? onClick : undefined}
       className={cn(
-        "w-full h-12 rounded-2xl px-3 flex items-center text-left relative overflow-hidden transition-colors",
+        "w-full h-12 rounded-2xl px-3 flex items-center text-left relative overflow-hidden transition-all duration-300",
         "border",
         isPlaying && "bg-brass/9 border-brass/26",
         isSelected && !isPlaying && "bg-mineral/10 border-mineral/24",
@@ -35,6 +35,7 @@ export function TrackRow({ track, index, isSelected, isPlaying, isHost, isArchiv
         isHost && track.status === "ready" && "cursor-pointer",
         !isHost && "cursor-default",
       )}
+      style={{ animation: 'track-slide-in 300ms ease-out forwards', opacity: 0 }}
     >
       {(isPlaying || isSelected) && (
         <div
