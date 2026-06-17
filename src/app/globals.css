@@ -61,7 +61,7 @@
   }
   100% {
     transform: scale(15);
-    opacity: 0;
+    opacity: 0.01;
     border-width: 0.02px;
     filter: blur(20px);
   }
