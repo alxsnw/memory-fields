@@ -77,13 +77,18 @@ export default function LandingPage() {
       />
       <div
         className="fixed inset-0 z-0 pointer-events-none"
-        style={{
-          opacity: creating ? 1 : 0,
-          transform: 'scale(0.5)',
-          transition: 'opacity 1.5s ease-out',
-        }}
+        style={{ transform: 'scale(0.5)' }}
       >
-        <IdleAuroraField />
+        <div
+          className="w-full h-full"
+          style={{
+            opacity: creating ? 1 : 0,
+            transition: 'opacity 1.5s ease-out',
+            animation: creating ? 'aurora-pulse 18s ease-in-out 1.5s infinite' : 'none',
+          }}
+        >
+          <IdleAuroraField />
+        </div>
       </div>
       <DepthWaveRings />
 
