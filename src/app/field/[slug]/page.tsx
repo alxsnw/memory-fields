@@ -658,7 +658,7 @@ export default function FieldPage() {
     <>
       <IdleAuroraField />
       <div className="fixed inset-0 z-[9999] pointer-events-none bg-deep" style={{ animation: 'fade-out 2s ease-out 1s forwards' }} />
-      {mounted && currentTrack && isPlaying && (
+      {mounted && currentTrack && (isPlaying || idleTransitionProgress > 0) && (
         <CanvasVisualizer
           state={interpolatedState}
           analyserNode={analyserRef.current}
