@@ -20,7 +20,7 @@ export function DepthWaveRings() {
             marginLeft: -ring.size / 2,
             marginTop: -ring.size / 2,
             opacity: ring.peakOpacity,
-            borderWidth: 0.5,
+            borderWidth: 0.1,
             animation: `depth-wave ${ring.duration}s ease-out infinite`,
             animationDelay: `${ring.delay}s`,
           }}
