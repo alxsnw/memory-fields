@@ -76,6 +76,13 @@ export default function FieldPage() {
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
 
+  // Visual mode transition system
+  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm">("signal-field");
+  const [transitionProgress, setTransitionProgress] = useState(1);
+  const [idleTransitionProgress, setIdleTransitionProgress] = useState(0);
+  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm"; to: "signal-field" | "spatial-rhythm" } | null>(null);
+  const idleTransitionRef = useRef<{ start: number; duration: number; target: number } | null>(null);
+
   const handleArchive = useCallback((track: Track) => {
     setArchivedTrackIds((prev) => {
       const next = new Set(prev);
@@ -101,8 +108,26 @@ export default function FieldPage() {
   // Field Controls handlers
   const handleModelChange = useCallback((model: VisualModel) => {
     if (!isHost || !room) return;
+    
+    // Start visual mode transition
+    if (model === "signal-field" || model === "spatial-rhythm") {
+      const fromMode = activeVisualMode;
+      const toMode = model === "signal-field" ? "signal-field" : "spatial-rhythm";
+      
+      if (fromMode !== toMode) {
+        transitionRef.current = {
+          start: performance.now(),
+          duration: 5000, // 5 seconds
+          from: fromMode,
+          to: toMode,
+        };
+        setActiveVisualMode(toMode);
+        setTransitionProgress(0);
+      }
+    }
+    
     syncState({ visual_model: model });
-  }, [isHost, room]);
+  }, [isHost, room, activeVisualMode]);
 
   const handlePaletteChange = useCallback((mode: PaletteMode) => {
     if (!isHost || !room) return;
@@ -201,6 +226,40 @@ export default function FieldPage() {
   const nextTrack = currentIndex < sortedTracks.length - 1 ? sortedTracks[currentIndex + 1] : null;
 
   useEffect(() => { setMounted(true); loadRoom(); }, []);
+
+  // Visual mode transition animation
+  useEffect(() => {
+    let rafId: number;
+    const animate = () => {
+      if (transitionRef.current) {
+        const elapsed = performance.now() - transitionRef.current.start;
+        const progress = Math.min(1, elapsed / transitionRef.current.duration);
+        // Smoothstep easing
+        const eased = progress * progress * (3 - 2 * progress);
+        setTransitionProgress(eased);
+        
+        if (progress >= 1) {
+          transitionRef.current = null;
+        }
+      }
+      
+      if (idleTransitionRef.current) {
+        const elapsed = performance.now() - idleTransitionRef.current.start;
+        const progress = Math.min(1, elapsed / idleTransitionRef.current.duration);
+        const eased = progress * progress * (3 - 2 * progress);
+        setIdleTransitionProgress(eased * idleTransitionRef.current.target);
+        
+        if (progress >= 1) {
+          idleTransitionRef.current = null;
+        }
+      }
+      
+      rafId = requestAnimationFrame(animate);
+    };
+    
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   // Journey ticker
   useEffect(() => {
@@ -375,6 +434,14 @@ export default function FieldPage() {
     });
     audio.addEventListener("ended", async () => {
       setIsPlaying(false);
+      
+      // Start track-to-track visual transition
+      idleTransitionRef.current = {
+        start: performance.now(),
+        duration: 4000, // 4 seconds
+        target: 0.3, // Partial fade for track transition
+      };
+      
       // Auto-advance to next track (with loop)
       const sorted = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
       const idx = sorted.findIndex(t => t.id === roomState?.current_track_id);
@@ -446,6 +513,14 @@ export default function FieldPage() {
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
+      
+      // Start pause transition (10 seconds fade to idle)
+      idleTransitionRef.current = {
+        start: performance.now(),
+        duration: 10000, // 10 seconds
+        target: 1, // Full fade to idle
+      };
+      
       syncState({ is_playing: false, paused_at: new Date().toISOString(), seek_position: audioRef.current.currentTime });
       return;
     }
@@ -468,6 +543,13 @@ export default function FieldPage() {
       alert("Playback failed: " + (err instanceof Error ? err.message : "Unknown error"));
       return;
     }
+
+    // Start play transition (5 seconds fade from idle)
+    idleTransitionRef.current = {
+      start: performance.now(),
+      duration: 5000, // 5 seconds
+      target: 0, // Fade back to active
+    };
 
     if (latentRef.current) {
       latentRef.current.fadeOut();
@@ -583,6 +665,9 @@ export default function FieldPage() {
           isPlaying={isPlaying}
           glitchAmount={glitchEnabled ? 0.4 : 0}
           coreTraceAmount={visualParams.coreTraceAmount}
+          activeVisualMode={activeVisualMode}
+          transitionProgress={transitionProgress}
+          idleTransitionProgress={idleTransitionProgress}
         />
       )}
 

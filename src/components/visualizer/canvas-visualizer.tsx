@@ -3,12 +3,17 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
+type VisualMode = "signal-field" | "spatial-rhythm";
+
 interface CanvasVisualizerProps {
   state: InterpolatedState;
   analyserNode: AnalyserNode | null;
   isPlaying: boolean;
   glitchAmount?: number;
   coreTraceAmount?: number;
+  activeVisualMode?: VisualMode;
+  transitionProgress?: number;
+  idleTransitionProgress?: number;
 }
 
 const FLOORS = {
@@ -20,7 +25,16 @@ const FLOORS = {
   lineAlpha: 0.08,
 };
 
-export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount = 0, coreTraceAmount = 1 }: CanvasVisualizerProps) {
+export function CanvasVisualizer({ 
+  state, 
+  analyserNode, 
+  isPlaying, 
+  glitchAmount = 0, 
+  coreTraceAmount = 1,
+  activeVisualMode = "signal-field",
+  transitionProgress = 1,
+  idleTransitionProgress = 1
+}: CanvasVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const accumRef = useRef<HTMLCanvasElement | null>(null);
   const animRef = useRef<number>(0);
@@ -58,7 +72,12 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
     // Accumulation decay
     if (accumCtx && isPlaying) {
       traceRef.current += dt;
-      accumCtx.globalAlpha = 0.985;
+      
+      // Ускоренный decay во время transition для избежания грязного шлейфа
+      const isTransitioning = transitionProgress < 1;
+      const decayRate = isTransitioning ? 0.95 : 0.985; // Быстрее во время перехода
+      
+      accumCtx.globalAlpha = decayRate;
       accumCtx.drawImage(accum, 0, 0);
       accumCtx.globalAlpha = 1;
     }
@@ -69,38 +88,100 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
       analyserNode.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
 
+      // Calculate crossfade alphas
+      const signalFieldAlpha = activeVisualMode === "signal-field" 
+        ? transitionProgress 
+        : (1 - transitionProgress);
+      const spatialRhythmAlpha = activeVisualMode === "spatial-rhythm" 
+        ? transitionProgress 
+        : (1 - transitionProgress);
+
       // Draw to accumulation canvas
       if (accumCtx) {
-        if (coreTraceAmount > 0) {
-          drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+        // Signal Field layers
+        if (signalFieldAlpha > 0.01) {
+          accumCtx.globalAlpha = signalFieldAlpha;
+          if (coreTraceAmount > 0) {
+            drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+          }
+          drawTopography(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawParticles(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawGrid(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawCore(accumCtx, w, h, dataArray, bufferLength, avg, now, state);
+          drawSignalField(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
         }
-        drawTopography(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
-        drawParticles(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
-        drawGrid(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
-        drawCore(accumCtx, w, h, dataArray, bufferLength, avg, now, state);
-        drawSignalField(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+
+        // Spatial Rhythm layers
+        if (spatialRhythmAlpha > 0.01) {
+          accumCtx.globalAlpha = spatialRhythmAlpha;
+          drawSpatialRhythm(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
       }
 
       // Draw accumulation to main canvas
       ctx.drawImage(accum, 0, 0);
 
       // Draw fresh layers on top
-      if (coreTraceAmount > 0) {
-        drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+      if (signalFieldAlpha > 0.01) {
+        ctx.globalAlpha = signalFieldAlpha;
+        if (coreTraceAmount > 0) {
+          drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+        }
+        drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        drawGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
+        drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
       }
-      drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
-      drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
-      drawGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
-      drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
-      drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+
+      if (spatialRhythmAlpha > 0.01) {
+        ctx.globalAlpha = spatialRhythmAlpha;
+        drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
 
       // Glitch pass
       if (glitchAmount > 0) {
         drawGlitch(ctx, w, h, avg, now, glitchAmount);
       }
     } else {
-      drawIdleAura(ctx, w, h, now, state);
-      drawCoreIdle(ctx, w, h, now, state);
+      // Idle state with transition
+      const idleAlpha = idleTransitionProgress;
+      const activeAlpha = 1 - idleTransitionProgress;
+
+      if (activeAlpha > 0.01 && analyserNode) {
+        // Draw fading active visualizer
+        const bufferLength = analyserNode.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyserNode.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
+
+        ctx.globalAlpha = activeAlpha;
+        if (activeVisualMode === "signal-field") {
+          if (coreTraceAmount > 0) {
+            drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+          }
+          drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
+          drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else {
+          drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      if (idleAlpha > 0.01) {
+        ctx.globalAlpha = idleAlpha;
+        drawIdleAura(ctx, w, h, now, state);
+        drawCoreIdle(ctx, w, h, now, state);
+        ctx.globalAlpha = 1;
+      }
+
       if (accumCtx) {
         accumCtx.clearRect(0, 0, w, h);
         traceRef.current = 0;
@@ -108,7 +189,7 @@ export function CanvasVisualizer({ state, analyserNode, isPlaying, glitchAmount 
     }
 
     animRef.current = requestAnimationFrame(draw);
-  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount]);
+  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, transitionProgress, idleTransitionProgress]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -293,6 +374,78 @@ function drawSignalField(
       ctx.globalAlpha = highs * 0.3;
       ctx.fill();
     }
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+/* ── Spatial Rhythm ── */
+function drawSpatialRhythm(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  // Horizontal wave bands driven by bass
+  const waveCount = 5 + Math.floor(s.density * 8);
+  for (let i = 0; i < waveCount; i++) {
+    const yBase = (h / waveCount) * i;
+    const amplitude = bass * 80 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+    const frequency = 0.01 + s.speed * 0.02;
+    const phase = now * (0.3 + s.speed * 0.5) + i * 0.8;
+
+    ctx.beginPath();
+    ctx.moveTo(0, yBase);
+
+    for (let x = 0; x <= w; x += 4) {
+      const wave = Math.sin(x * frequency + phase) * amplitude;
+      const secondary = Math.sin(x * frequency * 2.3 + phase * 1.5) * amplitude * 0.3;
+      const y = yBase + wave + secondary;
+      ctx.lineTo(x, y);
+    }
+
+    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + bass * 0.3);
+    ctx.strokeStyle = getColor(i, s.palette, waveCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 1.5 + bass * 2;
+    ctx.stroke();
+  }
+
+  // Arc pulses from center driven by beat
+  const arcCount = 3 + Math.floor(avg * 5);
+  const cx = w / 2;
+  const cy = h / 2;
+
+  for (let i = 0; i < arcCount; i++) {
+    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + bass * 0.5);
+    const startAngle = now * (0.2 + s.speed * 0.3) + i * 1.2;
+    const sweep = Math.PI * (0.3 + mids * 0.4);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, startAngle + sweep);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25);
+    ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 1 + mids * 2;
+    ctx.stroke();
+  }
+
+  // Floating spatial particles
+  const particleCount = Math.floor(20 + s.density * 40);
+  for (let i = 0; i < particleCount; i++) {
+    const seed = i * 97.3;
+    const baseX = (Math.sin(seed + now * 0.1) * 0.5 + 0.5) * w;
+    const baseY = (Math.cos(seed * 1.3 + now * 0.08) * 0.5 + 0.5) * h;
+    const drift = bass * 30 * s.audioSensitivity;
+    const x = baseX + Math.sin(now * 0.5 + seed) * drift;
+    const y = baseY + Math.cos(now * 0.4 + seed * 1.2) * drift;
+    const size = 1 + highs * 3;
+
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(i, s.palette, particleCount);
+    ctx.globalAlpha = Math.max(FLOORS.particleAlpha, 0.15 + highs * 0.4);
+    ctx.fill();
   }
 
   ctx.globalAlpha = 1;
