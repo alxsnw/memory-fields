@@ -53,7 +53,7 @@ export function FieldControls({
   onModelChange, onPaletteChange, onParamChange, onMutate, onExport,
 }: FieldControlsProps) {
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col mt-8">
       <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle mb-4">
         Field Controls
       </div>

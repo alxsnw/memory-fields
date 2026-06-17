@@ -60,7 +60,7 @@ export function TransportBar({
       </div>
 
       {/* Center zone: NOW PLAYING + track name + progress */}
-      <div className="flex-1 min-w-[280px] flex flex-col items-center">
+      <div className="flex-1 min-w-[280px] flex flex-col items-center -mt-4">
         {currentTrack ? (
           <>
             <div className="flex flex-col items-center mb-0.5">
@@ -109,8 +109,8 @@ export function TransportBar({
         )}
       </div>
 
-      {/* Sync status label - top right corner */}
-      {currentTrack && (
+      {/* Sync status label - hidden */}
+      {/* {currentTrack && (
         <div className="absolute top-4 right-4">
           <span className={cn(
             "font-mono text-[8px] uppercase tracking-[0.08em] px-1.5 py-[1px] rounded-full border",
@@ -122,7 +122,7 @@ export function TransportBar({
             {syncStatus}
           </span>
         </div>
-      )}
+      )} */}
 
       {/* Right zone: NEXT or spacer for balance */}
       {nextTrack ? (

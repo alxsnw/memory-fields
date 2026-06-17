@@ -175,7 +175,7 @@ export default function LandingPage() {
             )}
           </Button>
           <p className="mt-2.5 text-[10px] font-mono uppercase tracking-[0.1em] text-subtle">
-            private · persistent · shared
+            {creating ? 'initializing field...' : 'private · persistent · shared'}
           </p>
         </div>
       </div>
