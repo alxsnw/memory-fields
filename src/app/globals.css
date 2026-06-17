@@ -63,7 +63,7 @@
     transform: scale(15);
     opacity: 0;
     border-width: 0.02px;
-    filter: blur(60px);
+    filter: blur(40px);
   }
 }
 
