@@ -31,6 +31,60 @@ const FLOORS = {
 
 let __connCounter = 0;
 
+interface RendererConfig {
+  name: string;
+  opacity: number;
+  lineWidth: number;
+  glow: number;
+  accumDecay: number;
+  densityScale: number;
+  audioMapStrength: number;
+  contrast: number;
+  boost: number;
+}
+
+const signalFieldConfig: RendererConfig = {
+  name: "signal-field",
+  opacity: 1,
+  lineWidth: 1.2,
+  glow: 1.2,
+  accumDecay: 0.985,
+  densityScale: 1,
+  audioMapStrength: 1.2,
+  contrast: 1.3,
+  boost: 1.8,
+};
+
+const spatialRhythmConfig: RendererConfig = {
+  name: "spatial-rhythm",
+  opacity: 1,
+  lineWidth: 1,
+  glow: 1,
+  accumDecay: 0.985,
+  densityScale: 1,
+  audioMapStrength: 1,
+  contrast: 1,
+  boost: 1,
+};
+
+const particleMemoryConfig: RendererConfig = {
+  name: "particle-memory",
+  opacity: 1,
+  lineWidth: 1,
+  glow: 1,
+  accumDecay: 0.92,
+  densityScale: 1,
+  audioMapStrength: 1,
+  contrast: 1,
+  boost: 1,
+};
+
+const rendererConfigs: Record<string, RendererConfig> = {
+  "signal-field": signalFieldConfig,
+  "spatial-rhythm": spatialRhythmConfig,
+  "particle-memory": particleMemoryConfig,
+};
+
 interface ParticleState {
   x: number; y: number;
   homeX: number; homeY: number;
@@ -113,7 +167,7 @@ export function CanvasVisualizer({
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
   const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
-  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "" });
+  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "", cfgName: "", accumDecay: 0, globalAlpha: 1, boost: 1, contrast: 1, lineWidth: 1 });
   const connCountRef = useRef(0);
   const timingRef = useRef({
     audioAnalysis: [] as number[],
@@ -181,13 +235,15 @@ export function CanvasVisualizer({
       
       // Particle Memory uses Core Trace to control trail persistence
       let decayRate: number;
+      const cfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       if (activeVisualMode === "particle-memory" && !isTransitioning) {
-        decayRate = 0.92 + effCoreTrace * 0.07;
+        decayRate = cfg.accumDecay + effCoreTrace * 0.07;
       } else if (isTransitioning) {
         decayRate = 0.95;
       } else {
-        decayRate = 0.985;
+        decayRate = cfg.accumDecay;
       }
+      debugRef.current.accumDecay = decayRate;
       
       accumCtx.globalAlpha = decayRate;
       accumCtx.drawImage(accum, 0, 0);
@@ -232,6 +288,12 @@ export function CanvasVisualizer({
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
       debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0);
+      const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
+      debugRef.current.cfgName = currentCfg.name;
+      debugRef.current.globalAlpha = currentCfg.opacity;
+      debugRef.current.boost = currentCfg.boost;
+      debugRef.current.contrast = currentCfg.contrast;
+      debugRef.current.lineWidth = currentCfg.lineWidth;
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
@@ -341,7 +403,7 @@ export function CanvasVisualizer({
       if (accumCtx) {
         // Signal Field layers
         if (signalFieldAlpha > 0.01) {
-          accumCtx.globalAlpha = signalFieldAlpha;
+          accumCtx.globalAlpha = Math.min(1, signalFieldAlpha * signalFieldConfig.boost);
           if (effCoreTrace > 0) {
             drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
           }
@@ -379,7 +441,7 @@ export function CanvasVisualizer({
       // Draw fresh layers on top
       const tFresh = performance.now();
       if (signalFieldAlpha > 0.01) {
-        ctx.globalAlpha = signalFieldAlpha;
+        ctx.globalAlpha = Math.min(1, signalFieldAlpha * signalFieldConfig.boost);
         if (effCoreTrace > 0) {
           drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
         }
@@ -445,7 +507,7 @@ export function CanvasVisualizer({
         // Draw accumulation to main canvas
         ctx.drawImage(accum, 0, 0);
 
-        ctx.globalAlpha = activeAlpha;
+        ctx.globalAlpha = Math.min(1, activeAlpha * signalFieldConfig.boost);
         if (activeVisualMode === "signal-field") {
           if (effCoreTrace > 0) {
             drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
@@ -528,6 +590,8 @@ export function CanvasVisualizer({
       />
       <div className="fixed top-20 right-4 z-50 font-mono text-[9px] text-frost/30 leading-[1.3] pointer-events-none select-none text-right">
         <div className="text-frost/50">{debugRef.current.activeMode.replace("-", " ")}</div>
+        <div className="text-frost/20">cfg: {debugRef.current.cfgName} α:{debugRef.current.globalAlpha.toFixed(2)} boost:{debugRef.current.boost.toFixed(1)} ct:{debugRef.current.contrast.toFixed(1)} lw:{debugRef.current.lineWidth.toFixed(1)}</div>
+        <div className="text-frost/20">dcy:{debugRef.current.accumDecay.toFixed(3)}</div>
         <div>{debugRef.current.fps}fps <span className="text-frost/20">avg {debugRef.current.avgFps}</span></div>
         <div className="text-frost/20">{debugRef.current.frameTime.toFixed(1)}ms / {debugRef.current.renderTime.toFixed(1)}ms</div>
         <div>dpr {debugRef.current.dpr.toFixed(1)}</div>

@@ -77,7 +77,7 @@ export default function FieldPage() {
   const visibilityBoostRef = useRef(true);
   visibilityBoostRef.current = visibilityBoost;
   const visualParamsRef = useRef<VisualParams>(undefined as unknown as VisualParams);
-  const liveSliderRef = useRef({ coreTraceAmount: 0, density: 0, speed: 0 });
+  const liveSliderRef = useRef<{ coreTraceAmount?: number; density?: number; speed?: number }>({});
   const benchRef = useRef({ dprOverride: 0 });
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
