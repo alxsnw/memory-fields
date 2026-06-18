@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 function getVisitorId(): string {
   if (typeof window === "undefined") return "";
@@ -32,6 +32,14 @@ function markListenedToday(): void {
 export function useListenerMetric() {
   const [todayCount, setTodayCount] = useState<number | null>(null);
   const registering = useRef(false);
+
+  // Fetch count on mount
+  useEffect(() => {
+    fetch("/api/metrics/listen")
+      .then((r) => r.json())
+      .then((data) => setTodayCount(data.count ?? 0))
+      .catch(() => {});
+  }, []);
 
   const registerListen = useCallback(async () => {
     if (registering.current || alreadyListenedToday()) return;
