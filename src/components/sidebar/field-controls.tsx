@@ -10,7 +10,7 @@ import type { VisualModel, PaletteMode, VisualParams } from "@/types";
 const VISUAL_MODELS: { value: VisualModel; label: string; enabled: boolean }[] = [
   { value: "signal-field", label: "Signal Field", enabled: true },
   { value: "spatial-rhythm", label: "Spatial Rhythm", enabled: true },
-  { value: "particle-memory", label: "Particle Memory", enabled: false },
+  { value: "particle-memory", label: "Particle Memory", enabled: true },
   { value: "topographic-wave", label: "Topographic Wave", enabled: false },
   { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: false },
   { value: "spectral-grid", label: "Spectral Grid", enabled: false },

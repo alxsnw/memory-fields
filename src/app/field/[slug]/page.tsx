@@ -77,10 +77,11 @@ export default function FieldPage() {
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
 
   // Visual mode transition system
-  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm">("signal-field");
+  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
+  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
   const [transitionProgress, setTransitionProgress] = useState(1);
   const [idleTransitionProgress, setIdleTransitionProgress] = useState(0);
-  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm"; to: "signal-field" | "spatial-rhythm" } | null>(null);
+  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory"; to: "signal-field" | "spatial-rhythm" | "particle-memory" } | null>(null);
   const idleTransitionRef = useRef<{ start: number; duration: number; target: number } | null>(null);
 
   const handleArchive = useCallback((track: Track) => {
@@ -110,9 +111,9 @@ export default function FieldPage() {
     if (!isHost || !room) return;
     
     // Start visual mode transition
-    if (model === "signal-field" || model === "spatial-rhythm") {
+    if (model === "signal-field" || model === "spatial-rhythm" || model === "particle-memory") {
       const fromMode = activeVisualMode;
-      const toMode = model === "signal-field" ? "signal-field" : "spatial-rhythm";
+      const toMode = model;
       
       if (fromMode !== toMode) {
         transitionRef.current = {
@@ -121,6 +122,7 @@ export default function FieldPage() {
           from: fromMode,
           to: toMode,
         };
+        setPrevVisualMode(fromMode);
         setActiveVisualMode(toMode);
         setTransitionProgress(0);
       }
@@ -678,6 +680,7 @@ export default function FieldPage() {
           glitchAmount={glitchEnabled ? 0.4 : 0}
           coreTraceAmount={visualParams.coreTraceAmount}
           activeVisualMode={activeVisualMode}
+          prevVisualMode={prevVisualMode}
           transitionProgress={transitionProgress}
           idleTransitionProgress={idleTransitionProgress}
         />

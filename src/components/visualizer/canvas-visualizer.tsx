@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -12,6 +12,7 @@ interface CanvasVisualizerProps {
   glitchAmount?: number;
   coreTraceAmount?: number;
   activeVisualMode?: VisualMode;
+  prevVisualMode?: VisualMode;
   transitionProgress?: number;
   idleTransitionProgress?: number;
 }
@@ -32,6 +33,7 @@ export function CanvasVisualizer({
   glitchAmount = 0, 
   coreTraceAmount = 1,
   activeVisualMode = "signal-field",
+  prevVisualMode = "signal-field",
   transitionProgress = 1,
   idleTransitionProgress = 1
 }: CanvasVisualizerProps) {
@@ -88,13 +90,17 @@ export function CanvasVisualizer({
       analyserNode.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
 
-      // Calculate crossfade alphas
-      const signalFieldAlpha = activeVisualMode === "signal-field" 
-        ? transitionProgress 
-        : (1 - transitionProgress);
-      const spatialRhythmAlpha = activeVisualMode === "spatial-rhythm" 
-        ? transitionProgress 
-        : (1 - transitionProgress);
+      // Calculate crossfade alphas using prevVisualMode for transitions
+      const alphaFor = (mode: VisualMode): number => {
+        if (transitionProgress >= 1) return mode === activeVisualMode ? 1 : 0;
+        if (mode === activeVisualMode) return transitionProgress;
+        if (mode === prevVisualMode) return 1 - transitionProgress;
+        return 0;
+      };
+
+      const signalFieldAlpha = alphaFor("signal-field");
+      const spatialRhythmAlpha = alphaFor("spatial-rhythm");
+      const particleMemoryAlpha = alphaFor("particle-memory");
 
       // Draw to accumulation canvas
       if (accumCtx) {
@@ -116,6 +122,13 @@ export function CanvasVisualizer({
         if (spatialRhythmAlpha > 0.01) {
           accumCtx.globalAlpha = spatialRhythmAlpha;
           drawSpatialRhythm(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
+
+        // Particle Memory layers
+        if (particleMemoryAlpha > 0.01) {
+          accumCtx.globalAlpha = particleMemoryAlpha;
+          drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
           accumCtx.globalAlpha = 1;
         }
       }
@@ -143,6 +156,12 @@ export function CanvasVisualizer({
         ctx.globalAlpha = 1;
       }
 
+      if (particleMemoryAlpha > 0.01) {
+        ctx.globalAlpha = particleMemoryAlpha;
+        drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
       // Glitch pass
       if (glitchAmount > 0) {
         drawGlitch(ctx, w, h, avg, now, glitchAmount);
@@ -152,12 +171,32 @@ export function CanvasVisualizer({
       const idleAlpha = idleTransitionProgress;
       const activeAlpha = 1 - idleTransitionProgress;
 
-      if (activeAlpha > 0.01 && analyserNode) {
-        // Draw fading active visualizer
-        const bufferLength = analyserNode.frequencyBinCount;
+      // Gradual accumulation decay during idle transition
+      if (accumCtx) {
+        const decayRate = idleAlpha < 0.95 ? 0.95 : 0.985; // Faster decay during transition
+        accumCtx.globalAlpha = decayRate;
+        accumCtx.drawImage(accum, 0, 0);
+        accumCtx.globalAlpha = 1;
+      }
+
+      if (activeAlpha > 0.01) {
+        // Draw fading active visualizer using last known audio data or zeros
+        const bufferLength = analyserNode?.frequencyBinCount || 128;
         const dataArray = new Uint8Array(bufferLength);
-        analyserNode.getByteFrequencyData(dataArray);
+        
+        // Try to get audio data, but continue even if analyserNode is null
+        if (analyserNode) {
+          try {
+            analyserNode.getByteFrequencyData(dataArray);
+          } catch (e) {
+            // If analyser fails, use zeros (frozen frame effect)
+          }
+        }
+        
         const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
+
+        // Draw accumulation to main canvas
+        ctx.drawImage(accum, 0, 0);
 
         ctx.globalAlpha = activeAlpha;
         if (activeVisualMode === "signal-field") {
@@ -169,6 +208,8 @@ export function CanvasVisualizer({
           drawGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
           drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
           drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "particle-memory") {
+          drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -182,14 +223,15 @@ export function CanvasVisualizer({
         ctx.globalAlpha = 1;
       }
 
-      if (accumCtx) {
+      // Only clear accumulation when fully transitioned to idle
+      if (idleAlpha >= 0.99 && accumCtx) {
         accumCtx.clearRect(0, 0, w, h);
         traceRef.current = 0;
       }
     }
 
     animRef.current = requestAnimationFrame(draw);
-  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, transitionProgress, idleTransitionProgress]);
+  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -446,6 +488,116 @@ function drawSpatialRhythm(
     ctx.fillStyle = getColor(i, s.palette, particleCount);
     ctx.globalAlpha = Math.max(FLOORS.particleAlpha, 0.15 + highs * 0.4);
     ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+/* ── Particle Memory ── */
+function drawParticleMemory(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const density = s.density;
+  const speed = s.speed;
+  const sensitivity = s.audioSensitivity;
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  const particleCount = Math.floor(40 + density * 80);
+  const cols = Math.ceil(Math.sqrt(particleCount * (w / h)));
+  const rows = Math.ceil(particleCount / cols);
+  const cellW = w / cols;
+  const cellH = h / rows;
+
+  // Collect positions for constellation connections
+  const positions: { x: number; y: number; active: boolean; color: string }[] = [];
+
+  for (let i = 0; i < particleCount; i++) {
+    const seed = i * 97.3;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+
+    // Home position (grid-based with organic offset)
+    const homeX = col * cellW + cellW * 0.5 + Math.sin(seed * 1.3) * cellW * 0.15;
+    const homeY = row * cellH + cellH * 0.5 + Math.cos(seed * 0.7) * cellH * 0.15;
+
+    // Frequency index for this particle
+    const freqIdx = (i % (len - 2)) + 2;
+    const val = data[freqIdx] / 255;
+
+    // Audio-reactive displacement driven by particle's assigned band
+    const displacement = val * 80 * sensitivity * (0.5 + bass * 0.5);
+    const angle = now * (0.1 + speed * 0.15) + seed;
+    const x = homeX + Math.cos(angle) * displacement;
+    const y = homeY + Math.sin(angle * 0.6 + seed * 0.3) * displacement * 0.8;
+
+    // Organic slow wander
+    const wanderX = Math.sin(now * (0.02 + speed * 0.01) + seed) * 15;
+    const wanderY = Math.cos(now * (0.015 + speed * 0.01) + seed * 0.6) * 15;
+    const px = x + wanderX;
+    const py = y + wanderY;
+
+    const energy = Math.min(1, val * 2 + bass * 0.5);
+    const size = (1 + val * 4) * (0.5 + bass * 0.5);
+    const color = getColor(i, s.palette, particleCount);
+
+    // Glow around active particles
+    if (energy > 0.05) {
+      const gr = ctx.createRadialGradient(px, py, 0, px, py, size * 5);
+      gr.addColorStop(0, color + Math.floor(energy * 25).toString(16).padStart(2, "0"));
+      gr.addColorStop(1, "transparent");
+      ctx.fillStyle = gr;
+      ctx.globalAlpha = Math.max(FLOORS.particleAlpha, energy * 0.35);
+      ctx.fillRect(px - size * 5, py - size * 5, size * 10, size * 10);
+    }
+
+    // Main particle
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(0.5, size), 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.max(FLOORS.particleAlpha, 0.3 + val * 0.5 + bass * 0.2);
+    ctx.fill();
+
+    // Memory ghost at home position
+    ctx.beginPath();
+    ctx.arc(homeX, homeY, Math.max(0.3, size * 0.3), 0, Math.PI * 2);
+    ctx.fillStyle = getColor((i + 3) % s.palette.length, s.palette, s.palette.length);
+    ctx.globalAlpha = Math.max(FLOORS.particleAlpha * 0.5, 0.05 + val * 0.1);
+    ctx.fill();
+
+    positions.push({ x: px, y: py, active: energy > 0.15, color });
+  }
+
+  // Constellation connections between nearby active particles
+  const connectAlpha = Math.max(FLOORS.lineAlpha, 0.03 + bass * 0.06 + mids * 0.03);
+  ctx.globalAlpha = connectAlpha;
+  ctx.lineWidth = 0.5 + bass * 1;
+
+  const maxDist = Math.min(w, h) * 0.12;
+  for (let i = 0; i < positions.length; i++) {
+    const p1 = positions[i];
+    if (!p1.active) continue;
+
+    const maxJ = Math.min(i + 12, positions.length);
+    for (let j = i + 1; j < maxJ; j++) {
+      const p2 = positions[j];
+      if (!p2.active) continue;
+
+      const dx = p1.x - p2.x;
+      const dy = p1.y - p2.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < maxDist) {
+        const lineAlpha = Math.max(0, 1 - dist / maxDist) * 0.25;
+        ctx.strokeStyle = p1.color + Math.floor(lineAlpha * 255).toString(16).padStart(2, "0");
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+    }
   }
 
   ctx.globalAlpha = 1;
