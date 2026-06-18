@@ -100,6 +100,8 @@ export function useListenerMetric() {
             console.log("[metrics] registered, count:", data.count);
           }
         } else {
+          // Already registered today — set local flag anyway so we skip future POSTs
+          markListenedToday();
           if (process.env.NODE_ENV === "development") {
             console.log("[metrics] already registered today, count:", data.count);
           }
