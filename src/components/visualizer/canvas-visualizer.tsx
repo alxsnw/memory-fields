@@ -126,6 +126,7 @@ export function CanvasVisualizer({
     freshDraw: [] as number[],
     frameTotal: [] as number[],
   });
+  const drawRef = useRef<() => void>(() => {});
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -476,7 +477,6 @@ export function CanvasVisualizer({
       }
     }
 
-    animRef.current = requestAnimationFrame(draw);
     // Frame total timing
     const frameT = performance.now() - tFrame;
     const ftArr = timingRef.current.frameTotal;
@@ -486,10 +486,13 @@ export function CanvasVisualizer({
     debugRef.current.renderTime = rollingAvg(ftArr);
     debugRef.current.avgFps = ftArr.length > 1 ? Math.round((ftArr.length - 1) / ((ftArr[ftArr.length - 1] - ftArr[0]) / 1000)) : 60;
   }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
+  drawRef.current = draw;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Initialize timeRef to avoid huge first-frame dt
+    timeRef.current = performance.now() / 1000;
     const resize = () => {
       const override = benchRef?.current?.dprOverride;
       const dpr = override || Math.min(window.devicePixelRatio || 1, 1.5);
@@ -505,12 +508,16 @@ export function CanvasVisualizer({
     };
     resize();
     window.addEventListener("resize", resize);
-    animRef.current = requestAnimationFrame(draw);
+    const loop = () => {
+      drawRef.current();
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
     return () => {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animRef.current);
     };
-  }, [draw]);
+  }, []);
 
   return (
     <>
