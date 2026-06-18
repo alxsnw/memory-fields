@@ -8,6 +8,9 @@ function getVisitorId(): string {
   if (!id) {
     id = crypto.randomUUID();
     localStorage.setItem("mf_visitor_id", id);
+    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+      console.log("[metrics] created visitorId:", id);
+    }
   }
   return id;
 }
@@ -20,34 +23,62 @@ function todayStr(): string {
 function alreadyListenedToday(): boolean {
   if (typeof window === "undefined") return false;
   const key = `mf_listened_${todayStr()}`;
-  return localStorage.getItem(key) === "1";
+  const val = localStorage.getItem(key);
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    console.log("[metrics] daily flag", key, "=", val);
+  }
+  return val === "1";
 }
 
 function markListenedToday(): void {
   if (typeof window === "undefined") return;
   const key = `mf_listened_${todayStr()}`;
   localStorage.setItem(key, "1");
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+    console.log("[metrics] set daily flag:", key);
+  }
 }
 
 export function useListenerMetric() {
   const [todayCount, setTodayCount] = useState<number | null>(null);
   const registering = useRef(false);
 
-  // Fetch count on mount
+  // Fetch count on mount (GET)
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const visitorId = getVisitorId();
+    if (process.env.NODE_ENV === "development") {
+      console.log("[metrics] mount — visitorId:", visitorId, "alreadyListened:", alreadyListenedToday());
+    }
     fetch("/api/metrics/listen")
       .then((r) => r.json())
-      .then((data) => setTodayCount(data.count ?? 0))
-      .catch(() => {});
+      .then((data) => {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[metrics] GET response:", data);
+        }
+        setTodayCount(data.count ?? 0);
+      })
+      .catch((e) => {
+        console.error("[metrics] GET failed:", e);
+      });
   }, []);
 
   const registerListen = useCallback(async () => {
-    if (registering.current || alreadyListenedToday()) return;
+    if (registering.current || alreadyListenedToday()) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[metrics] skip register — alreadyListened:", alreadyListenedToday(), "registering:", registering.current);
+      }
+      return;
+    }
     registering.current = true;
 
     try {
       const visitorId = getVisitorId();
       if (!visitorId) return;
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("[metrics] POST — visitorId:", visitorId);
+      }
 
       const res = await fetch("/api/metrics/listen", {
         method: "POST",
@@ -55,13 +86,29 @@ export function useListenerMetric() {
         body: JSON.stringify({ visitor_id: visitorId }),
       });
 
+      const data = await res.json();
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("[metrics] POST response:", { status: res.status, data });
+      }
+
       if (res.ok) {
-        const data = await res.json();
         setTodayCount(data.count ?? 0);
-        markListenedToday();
+        if (data.isNew) {
+          markListenedToday();
+          if (process.env.NODE_ENV === "development") {
+            console.log("[metrics] registered, count:", data.count);
+          }
+        } else {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[metrics] already registered today, count:", data.count);
+          }
+        }
+      } else {
+        console.error("[metrics] POST error:", data.error);
       }
     } catch (e) {
-      console.error("[metric] register failed:", e);
+      console.error("[metrics] register failed:", e);
     } finally {
       registering.current = false;
     }
