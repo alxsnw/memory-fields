@@ -77,6 +77,8 @@ export default function FieldPage() {
   const visibilityBoostRef = useRef(true);
   visibilityBoostRef.current = visibilityBoost;
   const visualParamsRef = useRef<VisualParams>(undefined as unknown as VisualParams);
+  const liveSliderRef = useRef({ coreTraceAmount: 0, density: 0, speed: 0 });
+  const benchRef = useRef({ dprOverride: 0 });
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
 
@@ -147,6 +149,23 @@ export default function FieldPage() {
     const merged = { ...roomState.visual_params, ...params };
     syncState({ visual_params: merged });
   }, [isHost, room, roomState]);
+
+  const handleLiveParamChange = useCallback((params: Partial<VisualParams>) => {
+    if (params.coreTraceAmount !== undefined) liveSliderRef.current.coreTraceAmount = params.coreTraceAmount;
+    if (params.density !== undefined) liveSliderRef.current.density = params.density;
+    if (params.speed !== undefined) liveSliderRef.current.speed = params.speed;
+    if (params.coreTraceAmount !== undefined) visualParamsRef.current.coreTraceAmount = params.coreTraceAmount;
+  }, []);
+
+  const handleBenchDpr = useCallback((dpr: number) => {
+    benchRef.current.dprOverride = dpr;
+    window.dispatchEvent(new Event("resize"));
+  }, []);
+
+  const handleBenchReport = useCallback(() => {
+    console.log("=== BENCHMARK REPORT ===");
+    console.log("Benchmark report triggered. Check CanvasVisualizer overlay for live data.");
+  }, []);
 
   const handleMutate = useCallback(() => {
     if (!isHost || !room) return;
@@ -692,6 +711,8 @@ export default function FieldPage() {
           transitionProgress={transitionProgress}
           idleTransitionProgress={idleTransitionProgress}
           paletteMode={roomState?.palette_mode || "mineral"}
+          liveSliderRef={liveSliderRef}
+          benchRef={benchRef}
         />
       )}
 
@@ -784,6 +805,18 @@ export default function FieldPage() {
               <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={() => handleExport("png")}>
                 PNG
               </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", benchRef.current.dprOverride === 1 && "text-cyan/70")} onClick={() => handleBenchDpr(benchRef.current.dprOverride === 1 ? 0 : 1)}>
+                DPR1
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", benchRef.current.dprOverride === 1.25 && "text-cyan/70")} onClick={() => handleBenchDpr(benchRef.current.dprOverride === 1.25 ? 0 : 1.25)}>
+                DPR1.25
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", benchRef.current.dprOverride === 1.5 && "text-cyan/70")} onClick={() => handleBenchDpr(benchRef.current.dprOverride === 1.5 ? 0 : 1.5)}>
+                DPR1.5
+              </Button>
+              <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleBenchReport}>
+                Report
+              </Button>
             </div>
             {tuneMode && (
               <div className="border-t border-white/[0.06] pt-3">
@@ -818,13 +851,14 @@ export default function FieldPage() {
           </div>
         ) : (
           <FieldControls
-            visualModel={roomState?.visual_model || "signal-field"}
+            visualModel={activeVisualMode}
             paletteMode={roomState?.palette_mode || "mineral"}
             visualParams={visualParams}
             isHost={isHost}
             onModelChange={handleModelChange}
             onPaletteChange={handlePaletteChange}
             onParamChange={handleParamChange}
+            onLiveParamChange={handleLiveParamChange}
             onMutate={handleMutate}
             onExport={handleExport}
           />
@@ -884,13 +918,14 @@ export default function FieldPage() {
               </button>
             </div>
             <FieldControls
-              visualModel={roomState?.visual_model || "signal-field"}
+              visualModel={activeVisualMode}
               paletteMode={roomState?.palette_mode || "mineral"}
               visualParams={visualParams}
               isHost={isHost}
               onModelChange={handleModelChange}
               onPaletteChange={handlePaletteChange}
               onParamChange={handleParamChange}
+              onLiveParamChange={handleLiveParamChange}
               onMutate={handleMutate}
               onExport={handleExport}
             />

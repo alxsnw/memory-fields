@@ -25,6 +25,7 @@ interface FieldControlsProps {
   onModelChange: (model: VisualModel) => void;
   onPaletteChange: (mode: PaletteMode) => void;
   onParamChange: (params: Partial<VisualParams>) => void;
+  onLiveParamChange?: (params: Partial<VisualParams>) => void;
   onMutate: () => void;
   onExport: (format: "png" | "jpeg") => void;
 }
@@ -50,7 +51,7 @@ const unscale = (v: number) => v / 100;
 
 export function FieldControls({
   visualModel, paletteMode, visualParams, isHost,
-  onModelChange, onPaletteChange, onParamChange, onMutate, onExport,
+  onModelChange, onPaletteChange, onParamChange, onLiveParamChange, onMutate, onExport,
 }: FieldControlsProps) {
   return (
     <div className="h-full flex flex-col mt-8">
@@ -68,7 +69,7 @@ export function FieldControls({
                 onClick={() => m.enabled && isHost && onModelChange(m.value)}
                 disabled={!m.enabled || !isHost}
                 className={cn(
-                  "text-left px-2.5 py-2 rounded-lg border text-[11px] font-mono leading-[14px] transition-colors",
+                  "text-left px-2.5 py-2 rounded-lg border text-[11px] font-mono leading-[14px] transition-colors duration-75",
                   visualModel === m.value
                     ? "bg-white/[0.06] border-white/[0.14] text-frost"
                     : m.enabled
@@ -103,9 +104,9 @@ export function FieldControls({
               </button>
             ))}
           </div>
-          <FieldSlider label="Core Trace" value={scale(visualParams.coreTraceAmount)} onChange={(v) => onParamChange({ coreTraceAmount: unscale(v) })} />
-          <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} />
-          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} disabled={visualModel !== "particle-memory"} />
+          <FieldSlider label="Core Trace" value={scale(visualParams.coreTraceAmount)} onChange={(v) => onParamChange({ coreTraceAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ coreTraceAmount: unscale(v) })} />
+          <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
+          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} disabled={visualModel !== "particle-memory"} />
         </Section>
 
         {/* Processing - hidden for now */}

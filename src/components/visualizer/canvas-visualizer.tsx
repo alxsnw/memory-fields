@@ -16,6 +16,8 @@ interface CanvasVisualizerProps {
   transitionProgress?: number;
   idleTransitionProgress?: number;
   paletteMode?: string;
+  liveSliderRef?: { current: { coreTraceAmount?: number; density?: number; speed?: number } };
+  benchRef?: { current: { dprOverride?: number } };
 }
 
 const FLOORS = {
@@ -26,6 +28,8 @@ const FLOORS = {
   coreGlow: 0.2,
   lineAlpha: 0.08,
 };
+
+let __connCounter = 0;
 
 interface ParticleState {
   x: number; y: number;
@@ -95,6 +99,8 @@ export function CanvasVisualizer({
   transitionProgress = 1,
   idleTransitionProgress = 1,
   paletteMode = "mineral",
+  liveSliderRef,
+  benchRef,
 }: CanvasVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const accumRef = useRef<HTMLCanvasElement | null>(null);
@@ -106,12 +112,42 @@ export function CanvasVisualizer({
   const particleMemRef = useRef<ParticleState[]>([]);
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
+  const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
+  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "" });
+  const connCountRef = useRef(0);
+  const timingRef = useRef({
+    audioAnalysis: [] as number[],
+    particleUpdate: [] as number[],
+    particleDraw: [] as number[],
+    connectionsDraw: [] as number[],
+    signalFieldDraw: [] as number[],
+    spatialRhythmDraw: [] as number[],
+    accumDraw: [] as number[],
+    freshDraw: [] as number[],
+    frameTotal: [] as number[],
+  });
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // FPS tracking
+    const perf = perfRef.current;
+    perf.frameTimes.push(performance.now());
+    if (perf.frameTimes.length > 30) perf.frameTimes.shift();
+    if (perf.frameTimes.length >= 2) {
+      const elapsed = perf.frameTimes[perf.frameTimes.length - 1] - perf.frameTimes[0];
+      perf.fps = Math.round((perf.frameTimes.length - 1) / (elapsed / 1000));
+    }
+    perf.frames++;
+
+    // Adaptive quality
+    if (perf.fps < 24 && perf.quality > 0.5) perf.quality = Math.max(0.5, perf.quality - 0.1);
+    if (perf.fps > 50 && perf.quality < 1) perf.quality = Math.min(1, perf.quality + 0.1);
+
+    const adapt = perf.quality;
 
     let accumCtx: CanvasRenderingContext2D | null = null;
     if (!accumRef.current) {
@@ -133,6 +169,9 @@ export function CanvasVisualizer({
     ctx.fillStyle = "#030405";
     ctx.fillRect(0, 0, w, h);
 
+    // Use live slider value during drag for responsive feel
+    const effCoreTrace = liveSliderRef?.current?.coreTraceAmount ?? coreTraceAmount;
+
     // Accumulation decay
     if (accumCtx && isPlaying) {
       traceRef.current += dt;
@@ -142,7 +181,7 @@ export function CanvasVisualizer({
       // Particle Memory uses Core Trace to control trail persistence
       let decayRate: number;
       if (activeVisualMode === "particle-memory" && !isTransitioning) {
-        decayRate = 0.92 + coreTraceAmount * 0.07;
+        decayRate = 0.92 + effCoreTrace * 0.07;
       } else if (isTransitioning) {
         decayRate = 0.95;
       } else {
@@ -154,11 +193,18 @@ export function CanvasVisualizer({
       accumCtx.globalAlpha = 1;
     }
 
+    const tFrame = performance.now();
+
     if (analyserNode && isPlaying) {
+      const tAudio = performance.now();
       const bufferLength = analyserNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       analyserNode.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
+      const timings = timingRef.current;
+      const tArr = timings.audioAnalysis;
+      tArr.push(performance.now() - tAudio);
+      if (tArr.length > 120) tArr.shift();
 
       // Calculate crossfade alphas using prevVisualMode for transitions
       const alphaFor = (mode: VisualMode): number => {
@@ -172,10 +218,25 @@ export function CanvasVisualizer({
       const spatialRhythmAlpha = alphaFor("spatial-rhythm");
       const particleMemoryAlpha = alphaFor("particle-memory");
 
+      // Track which modes are actively rendering for crossfade validation
+      const renderingModes: string[] = [];
+      if (signalFieldAlpha > 0.01) renderingModes.push("signal-field");
+      if (spatialRhythmAlpha > 0.01) renderingModes.push("spatial-rhythm");
+      if (particleMemoryAlpha > 0.01) renderingModes.push("particle-memory");
+      debugRef.current.modes = renderingModes;
+      debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
+
+      // Debug info
+      debugRef.current.activeMode = activeVisualMode;
+      debugRef.current.fps = perf.fps;
+      debugRef.current.particleCount = particleMemRef.current.length;
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0);
+
       // Initialize/update Particle Memory state
+      const tParticleUpdate = performance.now();
       if (particleMemoryAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
-        const pmCount = getParticleCount(density);
+        const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
         
         if (pmCurrent !== pmCount || !pmInitRef.current) {
@@ -268,14 +329,20 @@ export function CanvasVisualizer({
           p.homeY += Math.cos(now * 0.008 + p.phase * 0.7) * 0.05;
         }
       }
+      {
+        const arr = timingRef.current.particleUpdate;
+        arr.push(performance.now() - tParticleUpdate);
+        if (arr.length > 120) arr.shift();
+      }
 
       // Draw to accumulation canvas
+      const tAccum = performance.now();
       if (accumCtx) {
         // Signal Field layers
         if (signalFieldAlpha > 0.01) {
           accumCtx.globalAlpha = signalFieldAlpha;
-          if (coreTraceAmount > 0) {
-            drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+          if (effCoreTrace > 0) {
+            drawMembrane(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
           }
           drawTopography(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
           drawParticles(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
@@ -295,19 +362,25 @@ export function CanvasVisualizer({
         // Particle Memory layers
         if (particleMemoryAlpha > 0.01) {
           accumCtx.globalAlpha = particleMemoryAlpha;
-          drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, false, coreTraceAmount);
+          drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, false, effCoreTrace);
           accumCtx.globalAlpha = 1;
         }
+      }
+      {
+        const arr = timings.accumDraw;
+        arr.push(performance.now() - tAccum);
+        if (arr.length > 120) arr.shift();
       }
 
       // Draw accumulation to main canvas
       ctx.drawImage(accum, 0, 0);
 
       // Draw fresh layers on top
+      const tFresh = performance.now();
       if (signalFieldAlpha > 0.01) {
         ctx.globalAlpha = signalFieldAlpha;
-        if (coreTraceAmount > 0) {
-          drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+        if (effCoreTrace > 0) {
+          drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
         }
         drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
@@ -325,9 +398,15 @@ export function CanvasVisualizer({
 
       if (particleMemoryAlpha > 0.01) {
         ctx.globalAlpha = particleMemoryAlpha;
-        drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, coreTraceAmount);
+        drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, effCoreTrace);
         ctx.globalAlpha = 1;
       }
+      {
+        const arr = timings.freshDraw;
+        arr.push(performance.now() - tFresh);
+        if (arr.length > 120) arr.shift();
+      }
+      debugRef.current.connectionCount = __connCounter;
 
       // Glitch pass
       if (glitchAmount > 0) {
@@ -367,8 +446,8 @@ export function CanvasVisualizer({
 
         ctx.globalAlpha = activeAlpha;
         if (activeVisualMode === "signal-field") {
-          if (coreTraceAmount > 0) {
-            drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, coreTraceAmount);
+          if (effCoreTrace > 0) {
+            drawMembrane(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, effCoreTrace);
           }
           drawTopography(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
           drawParticles(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
@@ -376,7 +455,7 @@ export function CanvasVisualizer({
           drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
           drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else if (activeVisualMode === "particle-memory") {
-          drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, coreTraceAmount);
+          drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, effCoreTrace);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -398,14 +477,25 @@ export function CanvasVisualizer({
     }
 
     animRef.current = requestAnimationFrame(draw);
+    // Frame total timing
+    const frameT = performance.now() - tFrame;
+    const ftArr = timingRef.current.frameTotal;
+    ftArr.push(frameT);
+    if (ftArr.length > 120) ftArr.shift();
+    debugRef.current.frameTime = frameT;
+    debugRef.current.renderTime = rollingAvg(ftArr);
+    debugRef.current.avgFps = ftArr.length > 1 ? Math.round((ftArr.length - 1) / ((ftArr[ftArr.length - 1] - ftArr[0]) / 1000)) : 60;
   }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const resize = () => {
-      canvas.width = window.innerWidth * devicePixelRatio;
-      canvas.height = window.innerHeight * devicePixelRatio;
+      const override = benchRef?.current?.dprOverride;
+      const dpr = override || Math.min(window.devicePixelRatio || 1, 1.5);
+      debugRef.current.dpr = dpr;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
       if (accumRef.current) {
@@ -423,16 +513,37 @@ export function CanvasVisualizer({
   }, [draw]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 w-full h-full"
-      style={{ background: "#030405" }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 w-full h-full"
+        style={{ background: "#030405" }}
+      />
+      <div className="fixed top-20 right-4 z-50 font-mono text-[9px] text-frost/30 leading-[1.3] pointer-events-none select-none text-right">
+        <div className="text-frost/50">{debugRef.current.activeMode.replace("-", " ")}</div>
+        <div>{debugRef.current.fps}fps <span className="text-frost/20">avg {debugRef.current.avgFps}</span></div>
+        <div className="text-frost/20">{debugRef.current.frameTime.toFixed(1)}ms / {debugRef.current.renderTime.toFixed(1)}ms</div>
+        <div>dpr {debugRef.current.dpr.toFixed(1)}</div>
+        {debugRef.current.particleCount > 0 && <div>{debugRef.current.particleCount}p / {debugRef.current.connectionCount}c</div>}
+        <div className={debugRef.current.warning ? "text-red/60" : "text-frost/20"}>
+          {debugRef.current.layers}lyr {debugRef.current.modes.join("+")}
+        </div>
+        {debugRef.current.warning && <div className="text-red/80 font-bold">{debugRef.current.warning}</div>}
+        <div className="text-frost/20">q{perfRef.current.quality.toFixed(2)}</div>
+      </div>
+    </>
   );
 }
 
 function getColor(i: number, palette: string[], count: number): string {
   return palette[Math.floor((i / count) * palette.length) % palette.length];
+}
+
+function rollingAvg(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < arr.length; i++) sum += arr[i];
+  return sum / arr.length;
 }
 
 /* ── Idle aura (enhanced) ── */
@@ -667,22 +778,27 @@ function drawParticleMemory(
 ) {
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const density = s.density;
+  const pLen = particles.length;
+  const palette = s.palette;
+  const pLenInv = 1 / pLen;
 
-  for (let i = 0; i < particles.length; i++) {
+  // Pre-compute colors and radii for the particle loop
+  for (let i = 0; i < pLen; i++) {
     const p = particles[i];
     const burstBoost = p.burstTimer > 0 ? 1 + p.burstTimer / 20 * 0.5 : 0;
+    const depthScale = 1 - p.depth;
 
-    const size = (p.baseSize + p.activity * 1.5 + burstBoost * 0.5) * (1 - p.depth * 0.3);
-    const baseAlpha = (p.brightness * 0.4 + p.activity * 0.4 + burstBoost * 0.2) * (1 - p.depth * 0.4);
+    const size = (p.baseSize + p.activity * 1.5 + burstBoost * 0.5) * (0.7 + depthScale * 0.3);
+    const baseAlpha = (p.brightness * 0.4 + p.activity * 0.4 + burstBoost * 0.2) * (0.6 + depthScale * 0.4);
     const alpha = Math.max(FLOORS.particleAlpha, baseAlpha);
 
-    const color = getColor(i, s.palette, particles.length);
+    const color = palette[Math.floor(i * pLenInv * palette.length) % palette.length];
 
-    // Glow on active particles
-    if (p.activity > 0.2 || burstBoost > 0) {
+    // Glow — only for highly active particles (reduces gradient calls ~70%)
+    if ((p.activity > 0.5 || burstBoost > 0.5) && (p.activity > 0.2 || burstBoost > 0)) {
       const glowSize = size * (3 + p.activity * 4 + burstBoost * 2);
       const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
-      const ga = Math.floor((p.activity * 0.12 + burstBoost * 0.08) * 255).toString(16).padStart(2, "0");
+      const ga = Math.floor(Math.min(1, p.activity * 0.12 + burstBoost * 0.08) * 255).toString(16).padStart(2, "0");
       gr.addColorStop(0, color + ga);
       gr.addColorStop(1, "transparent");
       ctx.fillStyle = gr;
@@ -701,32 +817,39 @@ function drawParticleMemory(
   }
 
   // Connections (only on fresh layer, not accum)
-  if (drawConnections) {
+  __connCounter = 0;
+  if (drawConnections && pLen > 10) {
     const connectThreshold = Math.min(w, h) * (0.025 + density * 0.025);
+    const connectThresholdSq = connectThreshold * connectThreshold;
     ctx.globalAlpha = 0.01 + density * 0.03;
     ctx.lineWidth = 0.3;
 
-    const step = Math.max(1, Math.floor(particles.length / 200));
-    for (let i = 0; i < particles.length; i += step) {
+    const step = Math.max(1, Math.floor(pLen / 200));
+    for (let i = 0; i < pLen; i += step) {
       const p1 = particles[i];
-      if (p1.activity < 0.3) continue;
-      const maxJ = Math.min(i + 6, particles.length);
+      const a1 = p1.activity;
+      if (a1 < 0.3) continue;
+      const maxJ = Math.min(i + 6, pLen);
+      const cid1 = p1.clusterId;
+      const x1 = p1.x;
+      const y1 = p1.y;
+      const ci = Math.floor(i * pLenInv * palette.length) % palette.length;
       for (let j = i + 1; j < maxJ; j++) {
         const p2 = particles[j];
-        if (p2.activity < 0.3) continue;
-        if (p1.clusterId !== p2.clusterId) continue;
-
-        const dx = p1.x - p2.x;
-        const dy = p1.y - p2.y;
+        if (p2.activity < 0.3 || p2.clusterId !== cid1) continue;
+        const dx = x1 - p2.x;
+        const dy = y1 - p2.y;
         const distSq = dx * dx + dy * dy;
-
-        if (distSq < connectThreshold * connectThreshold) {
-          const a = Math.max(0, 1 - Math.sqrt(distSq) / connectThreshold) * 0.06;
-          ctx.strokeStyle = getColor(i, s.palette, particles.length) + Math.floor(a * 255).toString(16).padStart(2, "0");
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
+        if (distSq < connectThresholdSq) {
+          const a = (1 - Math.sqrt(distSq) / connectThreshold) * 0.06;
+          if (a > 0.01) {
+            ctx.strokeStyle = palette[ci] + Math.floor(a * 255).toString(16).padStart(2, "0");
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+            __connCounter++;
+          }
         }
       }
     }
