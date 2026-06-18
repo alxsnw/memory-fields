@@ -781,6 +781,7 @@ function drawParticleMemory(
   const pLen = particles.length;
   const palette = s.palette;
   const pLenInv = 1 / pLen;
+  const PM_COLOR = "#eaedf2";
 
   // Pre-compute colors and radii for the particle loop
   for (let i = 0; i < pLen; i++) {
@@ -792,7 +793,7 @@ function drawParticleMemory(
     const baseAlpha = (p.brightness * 0.4 + p.activity * 0.4 + burstBoost * 0.2) * (0.6 + depthScale * 0.4);
     const alpha = Math.max(FLOORS.particleAlpha, baseAlpha);
 
-    const color = palette[Math.floor(i * pLenInv * palette.length) % palette.length];
+    const color = PM_COLOR;
 
     // Glow — only for highly active particles (reduces gradient calls ~70%)
     if ((p.activity > 0.5 || burstBoost > 0.5) && (p.activity > 0.2 || burstBoost > 0)) {
@@ -833,7 +834,6 @@ function drawParticleMemory(
       const cid1 = p1.clusterId;
       const x1 = p1.x;
       const y1 = p1.y;
-      const ci = Math.floor(i * pLenInv * palette.length) % palette.length;
       for (let j = i + 1; j < maxJ; j++) {
         const p2 = particles[j];
         if (p2.activity < 0.3 || p2.clusterId !== cid1) continue;
@@ -843,7 +843,7 @@ function drawParticleMemory(
         if (distSq < connectThresholdSq) {
           const a = (1 - Math.sqrt(distSq) / connectThreshold) * 0.06;
           if (a > 0.01) {
-            ctx.strokeStyle = palette[ci] + Math.floor(a * 255).toString(16).padStart(2, "0");
+            ctx.strokeStyle = PM_COLOR + Math.floor(a * 255).toString(16).padStart(2, "0");
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(p2.x, p2.y);
