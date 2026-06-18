@@ -15,6 +15,7 @@ interface CanvasVisualizerProps {
   prevVisualMode?: VisualMode;
   transitionProgress?: number;
   idleTransitionProgress?: number;
+  paletteMode?: string;
 }
 
 const FLOORS = {
@@ -26,6 +27,63 @@ const FLOORS = {
   lineAlpha: 0.08,
 };
 
+interface ParticleState {
+  x: number; y: number;
+  homeX: number; homeY: number;
+  vx: number; vy: number;
+  freqBin: number;
+  baseSize: number;
+  brightness: number;
+  activity: number;
+  age: number;
+  clusterId: number;
+  phase: number;
+  burstTimer: number;
+  depth: number;
+}
+
+function getParticleCount(density: number): number {
+  if (density < 0.33) return 250 + Math.round((density / 0.33) * 150);
+  if (density < 0.66) return 400 + Math.round(((density - 0.33) / 0.33) * 600);
+  return 1000 + Math.round(((density - 0.66) / 0.34) * 800);
+}
+
+function initializeParticles(count: number, w: number, h: number): ParticleState[] {
+  const clusterCount = 4 + Math.floor(Math.random() * 3);
+  const clusters = Array.from({ length: clusterCount }, () => ({
+    cx: w * (0.15 + Math.random() * 0.7),
+    cy: h * (0.15 + Math.random() * 0.7),
+    spread: Math.min(w, h) * (0.04 + Math.random() * 0.1),
+    depth: 0.3 + Math.random() * 0.7,
+  }));
+
+  const particles: ParticleState[] = [];
+  for (let i = 0; i < count; i++) {
+    const cluster = clusters[i % clusterCount];
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * cluster.spread;
+    const homeX = cluster.cx + Math.cos(angle) * dist;
+    const homeY = cluster.cy + Math.sin(angle) * dist;
+
+    particles.push({
+      x: homeX + (Math.random() - 0.5) * 20,
+      y: homeY + (Math.random() - 0.5) * 20,
+      homeX, homeY,
+      vx: 0, vy: 0,
+      freqBin: (i % 126) + 2,
+      baseSize: 0.3 + Math.random() * 1.5,
+      brightness: 0.2 + Math.random() * 0.6,
+      activity: 0,
+      age: 0,
+      clusterId: i % clusterCount,
+      phase: i * 97.3 % (Math.PI * 2),
+      burstTimer: 0,
+      depth: cluster.depth * (0.5 + Math.random() * 0.5),
+    });
+  }
+  return particles;
+}
+
 export function CanvasVisualizer({ 
   state, 
   analyserNode, 
@@ -35,7 +93,8 @@ export function CanvasVisualizer({
   activeVisualMode = "signal-field",
   prevVisualMode = "signal-field",
   transitionProgress = 1,
-  idleTransitionProgress = 1
+  idleTransitionProgress = 1,
+  paletteMode = "mineral",
 }: CanvasVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const accumRef = useRef<HTMLCanvasElement | null>(null);
@@ -44,6 +103,9 @@ export function CanvasVisualizer({
   const traceRef = useRef(0);
   const glitchPhaseRef = useRef(0);
   const glitchEventRef = useRef(0);
+  const particleMemRef = useRef<ParticleState[]>([]);
+  const prevBassRef = useRef(0);
+  const pmInitRef = useRef(false);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -75,9 +137,17 @@ export function CanvasVisualizer({
     if (accumCtx && isPlaying) {
       traceRef.current += dt;
       
-      // Ускоренный decay во время transition для избежания грязного шлейфа
       const isTransitioning = transitionProgress < 1;
-      const decayRate = isTransitioning ? 0.95 : 0.985; // Быстрее во время перехода
+      
+      // Particle Memory uses Core Trace to control trail persistence
+      let decayRate: number;
+      if (activeVisualMode === "particle-memory" && !isTransitioning) {
+        decayRate = 0.92 + coreTraceAmount * 0.07;
+      } else if (isTransitioning) {
+        decayRate = 0.95;
+      } else {
+        decayRate = 0.985;
+      }
       
       accumCtx.globalAlpha = decayRate;
       accumCtx.drawImage(accum, 0, 0);
@@ -101,6 +171,103 @@ export function CanvasVisualizer({
       const signalFieldAlpha = alphaFor("signal-field");
       const spatialRhythmAlpha = alphaFor("spatial-rhythm");
       const particleMemoryAlpha = alphaFor("particle-memory");
+
+      // Initialize/update Particle Memory state
+      if (particleMemoryAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+        const density = state.density;
+        const pmCount = getParticleCount(density);
+        const pmCurrent = particleMemRef.current.length;
+        
+        if (pmCurrent !== pmCount || !pmInitRef.current) {
+          pmInitRef.current = true;
+          particleMemRef.current = initializeParticles(pmCount, w, h);
+        }
+        
+        // Update particle state each frame
+        const bass = dataArray.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+        const mids = dataArray.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+        const highs = dataArray.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+        const sensitivity = state.audioSensitivity;
+        const speed = Math.max(0.1, state.speed);
+        const density2 = state.density;
+        const isMineral = paletteMode === "mineral";
+        const flowMul = isMineral ? 0.7 : 1.3;
+        const jitterMul = isMineral ? 0.5 : 1.5;
+
+        // Kick detection
+        const bassDeriv = (bass - prevBassRef.current) / Math.max(dt, 0.016);
+        prevBassRef.current = bass;
+        const isKick = bassDeriv > 1.8 && bass > 0.25;
+
+        const particles = particleMemRef.current;
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          const val = dataArray[Math.min(p.freqBin, bufferLength - 1)] / 255;
+          p.activity = val * 0.5 + bass * 0.3 + mids * 0.2;
+
+          const dx = p.x - w / 2;
+          const dy = p.y - h / 2;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 0.001;
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          // Flow: orbital
+          const orbitStrength = 0.3 * flowMul * (1 - p.depth * 0.5);
+          const flowVx = -ny * orbitStrength;
+          const flowVy = nx * orbitStrength;
+
+          // Bass: outward pressure
+          const bassPush = bass * 2.0 * sensitivity * flowMul;
+          const pushVx = nx * bassPush * (1 - p.depth * 0.3);
+          const pushVy = ny * bassPush * (1 - p.depth * 0.3);
+
+          // Mid: turbulence
+          const turbScale = 2.0 + density2 * 2;
+          const turbAngle = now * 0.12 * speed + p.x / w * turbScale + p.y / h * turbScale;
+          const turbStr = (0.3 + mids * 1.2) * sensitivity * flowMul;
+          const turbVx = Math.cos(turbAngle + p.phase) * turbStr * (1 - p.depth * 0.4);
+          const turbVy = Math.sin(turbAngle * 0.7 + 1.3 + p.phase) * turbStr * (1 - p.depth * 0.4);
+
+          // Home attraction
+          const homeDx = p.homeX - p.x;
+          const homeDy = p.homeY - p.y;
+          const homeStr = 0.003 * (1 + p.depth * 0.5);
+
+          // High jitter
+          const jitter = highs * 2.0 * sensitivity * jitterMul * (0.5 + p.depth * 0.5);
+          const jx = Math.sin(now * 2.5 + p.phase * 2) * jitter;
+          const jy = Math.cos(now * 2.1 + p.phase * 1.7) * jitter;
+
+          p.vx += (flowVx + pushVx + turbVx + homeDx * homeStr + jx) * dt * 60;
+          p.vy += (flowVy + pushVy + turbVy + homeDy * homeStr + jy) * dt * 60;
+
+          if (isKick) {
+            const burstStr = 4.0 * sensitivity * (0.5 + bass * 0.5);
+            p.vx += nx * burstStr;
+            p.vy += ny * burstStr;
+            p.burstTimer = 20;
+            p.activity = 1;
+          }
+          if (p.burstTimer > 0) p.burstTimer--;
+
+          const damp = isMineral ? 0.96 : 0.94;
+          p.vx *= damp;
+          p.vy *= damp;
+
+          const dtScale = dt * 60 * speed * (1 - p.depth * 0.3);
+          p.x += p.vx * dtScale;
+          p.y += p.vy * dtScale;
+
+          // Edge wrap
+          if (p.x < -80) p.x = w + 80;
+          if (p.x > w + 80) p.x = -80;
+          if (p.y < -80) p.y = h + 80;
+          if (p.y > h + 80) p.y = -80;
+
+          p.homeX += Math.sin(now * 0.01 + p.phase) * 0.05;
+          p.homeY += Math.cos(now * 0.008 + p.phase * 0.7) * 0.05;
+        }
+      }
 
       // Draw to accumulation canvas
       if (accumCtx) {
@@ -128,7 +295,7 @@ export function CanvasVisualizer({
         // Particle Memory layers
         if (particleMemoryAlpha > 0.01) {
           accumCtx.globalAlpha = particleMemoryAlpha;
-          drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, false, coreTraceAmount);
           accumCtx.globalAlpha = 1;
         }
       }
@@ -158,7 +325,7 @@ export function CanvasVisualizer({
 
       if (particleMemoryAlpha > 0.01) {
         ctx.globalAlpha = particleMemoryAlpha;
-        drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, coreTraceAmount);
         ctx.globalAlpha = 1;
       }
 
@@ -209,7 +376,7 @@ export function CanvasVisualizer({
           drawCore(ctx, w, h, dataArray, bufferLength, avg, now, state);
           drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else if (activeVisualMode === "particle-memory") {
-          drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, coreTraceAmount);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -231,7 +398,7 @@ export function CanvasVisualizer({
     }
 
     animRef.current = requestAnimationFrame(draw);
-  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress]);
+  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -492,110 +659,75 @@ function drawSpatialRhythm(
 
   ctx.globalAlpha = 1;
 }
-
 /* ── Particle Memory ── */
 function drawParticleMemory(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
+  particles: ParticleState[], drawConnections: boolean, coreTraceAmount: number,
 ) {
-  const density = s.density;
-  const speed = s.speed;
-  const sensitivity = s.audioSensitivity;
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
-  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
-  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const density = s.density;
 
-  const particleCount = Math.floor(40 + density * 80);
-  const cols = Math.ceil(Math.sqrt(particleCount * (w / h)));
-  const rows = Math.ceil(particleCount / cols);
-  const cellW = w / cols;
-  const cellH = h / rows;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const burstBoost = p.burstTimer > 0 ? 1 + p.burstTimer / 20 * 0.5 : 0;
 
-  // Collect positions for constellation connections
-  const positions: { x: number; y: number; active: boolean; color: string }[] = [];
+    const size = (p.baseSize + p.activity * 1.5 + burstBoost * 0.5) * (1 - p.depth * 0.3);
+    const baseAlpha = (p.brightness * 0.4 + p.activity * 0.4 + burstBoost * 0.2) * (1 - p.depth * 0.4);
+    const alpha = Math.max(FLOORS.particleAlpha, baseAlpha);
 
-  for (let i = 0; i < particleCount; i++) {
-    const seed = i * 97.3;
-    const col = i % cols;
-    const row = Math.floor(i / cols);
+    const color = getColor(i, s.palette, particles.length);
 
-    // Home position (grid-based with organic offset)
-    const homeX = col * cellW + cellW * 0.5 + Math.sin(seed * 1.3) * cellW * 0.15;
-    const homeY = row * cellH + cellH * 0.5 + Math.cos(seed * 0.7) * cellH * 0.15;
-
-    // Frequency index for this particle
-    const freqIdx = (i % (len - 2)) + 2;
-    const val = data[freqIdx] / 255;
-
-    // Audio-reactive displacement driven by particle's assigned band
-    const displacement = val * 80 * sensitivity * (0.5 + bass * 0.5);
-    const angle = now * (0.1 + speed * 0.15) + seed;
-    const x = homeX + Math.cos(angle) * displacement;
-    const y = homeY + Math.sin(angle * 0.6 + seed * 0.3) * displacement * 0.8;
-
-    // Organic slow wander
-    const wanderX = Math.sin(now * (0.02 + speed * 0.01) + seed) * 15;
-    const wanderY = Math.cos(now * (0.015 + speed * 0.01) + seed * 0.6) * 15;
-    const px = x + wanderX;
-    const py = y + wanderY;
-
-    const energy = Math.min(1, val * 2 + bass * 0.5);
-    const size = (1 + val * 4) * (0.5 + bass * 0.5);
-    const color = getColor(i, s.palette, particleCount);
-
-    // Glow around active particles
-    if (energy > 0.05) {
-      const gr = ctx.createRadialGradient(px, py, 0, px, py, size * 5);
-      gr.addColorStop(0, color + Math.floor(energy * 25).toString(16).padStart(2, "0"));
+    // Glow on active particles
+    if (p.activity > 0.2 || burstBoost > 0) {
+      const glowSize = size * (3 + p.activity * 4 + burstBoost * 2);
+      const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
+      const ga = Math.floor((p.activity * 0.12 + burstBoost * 0.08) * 255).toString(16).padStart(2, "0");
+      gr.addColorStop(0, color + ga);
       gr.addColorStop(1, "transparent");
       ctx.fillStyle = gr;
-      ctx.globalAlpha = Math.max(FLOORS.particleAlpha, energy * 0.35);
-      ctx.fillRect(px - size * 5, py - size * 5, size * 10, size * 10);
+      ctx.globalAlpha = Math.max(FLOORS.particleAlpha * 0.5, alpha * 0.25);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, glowSize, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    // Main particle
+    // Particle
     ctx.beginPath();
-    ctx.arc(px, py, Math.max(0.5, size), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, Math.max(0.3, size * 0.5), 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.globalAlpha = Math.max(FLOORS.particleAlpha, 0.3 + val * 0.5 + bass * 0.2);
+    ctx.globalAlpha = alpha;
     ctx.fill();
-
-    // Memory ghost at home position
-    ctx.beginPath();
-    ctx.arc(homeX, homeY, Math.max(0.3, size * 0.3), 0, Math.PI * 2);
-    ctx.fillStyle = getColor((i + 3) % s.palette.length, s.palette, s.palette.length);
-    ctx.globalAlpha = Math.max(FLOORS.particleAlpha * 0.5, 0.05 + val * 0.1);
-    ctx.fill();
-
-    positions.push({ x: px, y: py, active: energy > 0.15, color });
   }
 
-  // Constellation connections between nearby active particles
-  const connectAlpha = Math.max(FLOORS.lineAlpha, 0.03 + bass * 0.06 + mids * 0.03);
-  ctx.globalAlpha = connectAlpha;
-  ctx.lineWidth = 0.5 + bass * 1;
+  // Connections (only on fresh layer, not accum)
+  if (drawConnections) {
+    const connectThreshold = Math.min(w, h) * (0.025 + density * 0.025);
+    ctx.globalAlpha = 0.01 + density * 0.03;
+    ctx.lineWidth = 0.3;
 
-  const maxDist = Math.min(w, h) * 0.12;
-  for (let i = 0; i < positions.length; i++) {
-    const p1 = positions[i];
-    if (!p1.active) continue;
+    const step = Math.max(1, Math.floor(particles.length / 200));
+    for (let i = 0; i < particles.length; i += step) {
+      const p1 = particles[i];
+      if (p1.activity < 0.3) continue;
+      const maxJ = Math.min(i + 6, particles.length);
+      for (let j = i + 1; j < maxJ; j++) {
+        const p2 = particles[j];
+        if (p2.activity < 0.3) continue;
+        if (p1.clusterId !== p2.clusterId) continue;
 
-    const maxJ = Math.min(i + 12, positions.length);
-    for (let j = i + 1; j < maxJ; j++) {
-      const p2 = positions[j];
-      if (!p2.active) continue;
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const distSq = dx * dx + dy * dy;
 
-      const dx = p1.x - p2.x;
-      const dy = p1.y - p2.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < maxDist) {
-        const lineAlpha = Math.max(0, 1 - dist / maxDist) * 0.25;
-        ctx.strokeStyle = p1.color + Math.floor(lineAlpha * 255).toString(16).padStart(2, "0");
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
+        if (distSq < connectThreshold * connectThreshold) {
+          const a = Math.max(0, 1 - Math.sqrt(distSq) / connectThreshold) * 0.06;
+          ctx.strokeStyle = getColor(i, s.palette, particles.length) + Math.floor(a * 255).toString(16).padStart(2, "0");
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
       }
     }
   }

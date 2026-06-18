@@ -53,6 +53,14 @@ create table connected_clients (
   primary key (client_id, room_id)
 );
 
+create table daily_listeners (
+  id bigint generated always as identity primary key,
+  visitor_id text not null,
+  listened_date date not null default current_date,
+  created_at timestamptz default now(),
+  unique (visitor_id, listened_date)
+);
+
 -- RLS
 alter table rooms enable row level security;
 alter table tracks enable row level security;
@@ -63,11 +71,14 @@ create policy "Public access for MVP" on rooms for all using (true) with check (
 create policy "Public access for MVP" on tracks for all using (true) with check (true);
 create policy "Public access for MVP" on room_state for all using (true) with check (true);
 create policy "Public access for MVP" on connected_clients for all using (true) with check (true);
+create policy "Public insert for MVP" on daily_listeners for insert with check (true);
+create policy "Public select for MVP" on daily_listeners for select using (true);
 
 -- Indexes
 create index tracks_room_id_idx on tracks(room_id);
 create index tracks_uploaded_at_idx on tracks(uploaded_at desc);
 create index connected_clients_room_id_idx on connected_clients(room_id);
+create index daily_listeners_listened_date_idx on daily_listeners(listened_date desc);
 
 -- Realtime
 alter publication supabase_realtime add table room_state;

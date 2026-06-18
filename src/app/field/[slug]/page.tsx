@@ -23,10 +23,13 @@ import AtlasScan from "@/components/visualizer/atlas-scan";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
 import { GlitchContainer } from "@/components/ui/glitch-container";
 import { FieldControls } from "@/components/sidebar/field-controls";
+import { useListenerMetric } from "@/lib/use-listener-metric";
+import { DailyListenerCount } from "@/components/metrics/daily-listener-count";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { List, SlidersHorizontal, X } from "lucide-react";
 
 function getClient() {
   return getSupabase();
@@ -70,11 +73,14 @@ export default function FieldPage() {
   const [showAtlasScan, setShowAtlasScan] = useState(false);
   const [glitchEnabled, setGlitchEnabled] = useState(false);
   const [visibilityBoost, setVisibilityBoost] = useState(true);
+  const [mobilePanel, setMobilePanel] = useState<null | "tracks" | "controls">(null);
   const visibilityBoostRef = useRef(true);
   visibilityBoostRef.current = visibilityBoost;
   const visualParamsRef = useRef<VisualParams>(undefined as unknown as VisualParams);
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
+
+  const { todayCount, registerListen } = useListenerMetric();
 
   // Visual mode transition system
   const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
@@ -488,6 +494,7 @@ export default function FieldPage() {
       }
       audio.play().then(() => {
         setIsPlaying(true);
+        registerListen();
         syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: 0 });
       }).catch((err) => {
         console.warn("[autoplay] failed:", err);
@@ -559,6 +566,7 @@ export default function FieldPage() {
     }
 
     setIsPlaying(true);
+    registerListen();
     syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: el.currentTime });
   };
 
@@ -683,15 +691,16 @@ export default function FieldPage() {
           prevVisualMode={prevVisualMode}
           transitionProgress={transitionProgress}
           idleTransitionProgress={idleTransitionProgress}
+          paletteMode={roomState?.palette_mode || "mineral"}
         />
       )}
 
       <AtlasScan active={showAtlasScan} seed={roomSeed.current} />
 
       <div className="fixed inset-0 pointer-events-none z-[1]">
-        <div className="absolute left-0 top-0 bottom-0 w-[400px] bg-gradient-to-r from-deep/60 to-transparent" />
-        <div className="absolute right-0 top-0 bottom-0 w-[460px] bg-gradient-to-l from-deep/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-[140px] bg-gradient-to-t from-deep/60 to-transparent" />
+        <div className="absolute left-0 top-0 bottom-0 w-[400px] bg-gradient-to-r from-deep/60 to-transparent hidden md:block md:w-[300px] lg:w-[400px]" />
+        <div className="absolute right-0 top-0 bottom-0 w-[460px] bg-gradient-to-l from-deep/60 to-transparent hidden lg:block" />
+        <div className="absolute bottom-0 left-0 right-0 h-[140px] bg-gradient-to-t from-deep/60 to-transparent md:h-[100px]" />
       </div>
 
       <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
@@ -715,7 +724,7 @@ export default function FieldPage() {
       </Dialog>
 
       <GlitchContainer active={glitchEnabled} frequency={0.0008}>
-        <aside className="fixed top-8 left-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex flex-col" style={{ animation: 'sidebar-slide-in 0.6s ease-out 1.2s forwards', opacity: 0, bottom: tracks.length > 0 ? 'auto' : '2rem', paddingBottom: tracks.length > 0 ? '0' : '0.75rem' }}>
+        <aside className="fixed top-8 left-8 w-[320px] rounded-3xl p-3 bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] z-10 flex-col hidden md:flex md:w-[280px] lg:w-[320px]" style={{ animation: 'sidebar-slide-in 0.6s ease-out 1.2s forwards', opacity: 0, bottom: tracks.length > 0 ? 'auto' : '2rem', paddingBottom: tracks.length > 0 ? '0' : '0.75rem' }}>
           <div className="shrink-0">
             <Brand />
 
@@ -732,10 +741,13 @@ export default function FieldPage() {
               <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
             </div>
           )}
+          <div className="mt-auto pt-2 pb-1">
+            <DailyListenerCount count={todayCount} />
+          </div>
         </aside>
       </GlitchContainer>
 
-      <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl px-3 py-3 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto panel-scroll">
+      <aside className="fixed top-8 right-8 bottom-8 w-[380px] rounded-3xl px-3 py-3 bg-blue-black/92 border border-white/[0.08] backdrop-blur-[18px] z-10 overflow-y-auto panel-scroll hidden lg:block">
         {isDev ? (
           <div className="space-y-4">
             <div>
@@ -819,12 +831,72 @@ export default function FieldPage() {
         )}
       </aside>
 
+      {/* Mobile drawer toggles */}
+      <div className="fixed top-8 left-8 z-20 flex flex-col gap-3 lg:hidden">
+        {tracks.length > 0 && (
+          <button
+            onClick={() => setMobilePanel(mobilePanel === "tracks" ? null : "tracks")}
+            className="w-11 h-11 rounded-xl bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] flex items-center justify-center text-frost/60 hover:text-frost transition-colors"
+          >
+            {mobilePanel === "tracks" ? <X className="w-5 h-5" /> : <List className="w-5 h-5" />}
+          </button>
+        )}
+      </div>
+      <div className="fixed top-8 right-8 z-20 md:hidden">
+        <button
+          onClick={() => setMobilePanel(mobilePanel === "controls" ? null : "controls")}
+          className="w-11 h-11 rounded-xl bg-blue-black/88 border border-white/[0.08] backdrop-blur-[16px] flex items-center justify-center text-frost/60 hover:text-frost transition-colors"
+        >
+          {mobilePanel === "controls" ? <X className="w-5 h-5" /> : <SlidersHorizontal className="w-5 h-5" />}
+        </button>
+      </div>
+
       <GlitchContainer active={glitchEnabled} frequency={0.001}>
         <TransportBar currentTrack={currentTrack} isPlaying={isPlaying} currentTime={currentTime} duration={duration}
           isHost={isHost} syncStatus={syncStatus} onPlayPause={handlePlayPause} onSeek={handleSeek}
           onNext={() => nextTrack && handleSelectTrack(nextTrack)}
           nextTrack={nextTrack} />
       </GlitchContainer>
+
+      {/* Mobile drawers */}
+      {mobilePanel === "tracks" && (
+        <div className="fixed inset-0 z-30 lg:hidden" onClick={() => setMobilePanel(null)}>
+          <div className="absolute inset-0 bg-deep/60 backdrop-blur-sm" />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[65vh] bg-blue-black/95 border-t border-white/[0.08] rounded-t-3xl p-4 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">Loaded Signals</span>
+              <button onClick={() => setMobilePanel(null)} className="text-frost/40 hover:text-frost">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <MemoryArchive tracks={sortedTracks} currentTrackId={roomState?.current_track_id || null} isPlaying={isPlaying} isHost={isHost} archivedTrackIds={archivedTrackIds} onArchive={handleArchive} onSelectTrack={handleSelectTrack} />
+          </div>
+        </div>
+      )}
+      {mobilePanel === "controls" && (
+        <div className="fixed inset-0 z-30 md:hidden" onClick={() => setMobilePanel(null)}>
+          <div className="absolute inset-0 bg-deep/60 backdrop-blur-sm" />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[65vh] bg-blue-black/95 border-t border-white/[0.08] rounded-t-3xl p-4 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle">Field Controls</span>
+              <button onClick={() => setMobilePanel(null)} className="text-frost/40 hover:text-frost">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <FieldControls
+              visualModel={roomState?.visual_model || "signal-field"}
+              paletteMode={roomState?.palette_mode || "mineral"}
+              visualParams={visualParams}
+              isHost={isHost}
+              onModelChange={handleModelChange}
+              onPaletteChange={handlePaletteChange}
+              onParamChange={handleParamChange}
+              onMutate={handleMutate}
+              onExport={handleExport}
+            />
+          </div>
+        </div>
+      )}
 
       {currentTrack && (
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50">

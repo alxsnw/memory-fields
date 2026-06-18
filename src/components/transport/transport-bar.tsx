@@ -36,10 +36,10 @@ export function TransportBar({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="fixed left-1/2 bottom-8 -translate-x-1/2 w-[min(860px,calc(100vw-64px))] h-[88px] rounded-3xl px-[18px] py-[14px] bg-graphite/88 border border-white/[0.08] backdrop-blur-[18px] shadow-[0_24px_80px_rgba(0,0,0,0.42)] flex items-center gap-4 z-50">
+    <div className="fixed left-1/2 bottom-8 -translate-x-1/2 w-[min(860px,calc(100vw-64px))] h-[88px] rounded-3xl px-[18px] py-[14px] bg-graphite/88 border border-white/[0.08] backdrop-blur-[18px] shadow-[0_24px_80px_rgba(0,0,0,0.42)] flex items-center gap-4 z-50 md:bottom-4 md:h-[72px] md:px-3 md:py-2 md:rounded-2xl md:gap-2 md:w-[calc(100vw-16px)] lg:w-[min(860px,calc(100vw-64px))] lg:h-[88px] lg:px-[18px] lg:py-[14px] lg:rounded-3xl lg:gap-4 lg:bottom-8">
 
       {/* Left zone: Play/Pause */}
-      <div className="w-[60px] shrink-0 flex items-center justify-center">
+      <div className="w-[60px] shrink-0 flex items-center justify-center md:w-[44px] lg:w-[60px]">
         <button
           onClick={onPlayPause}
           disabled={!currentTrack || !isHost}
@@ -49,30 +49,31 @@ export function TransportBar({
             "hover:bg-white/[0.13] hover:border-white/[0.22] hover:shadow-[0_0_24px_rgba(245,250,255,0.08)]",
             "active:scale-95",
             "disabled:opacity-36 disabled:cursor-not-allowed",
+            "md:w-9 md:h-9 lg:w-11 lg:h-11",
           )}
         >
           {isPlaying ? (
-            <Pause className="w-[18px] h-[18px] text-frost" />
+            <Pause className="w-[18px] h-[18px] text-frost md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" />
           ) : (
-            <Play className="w-[18px] h-[18px] text-frost ml-0.5" />
+            <Play className="w-[18px] h-[18px] text-frost ml-0.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px]" />
           )}
         </button>
       </div>
 
       {/* Center zone: NOW PLAYING + track name + progress */}
-      <div className="flex-1 min-w-[280px] flex flex-col items-center -mt-4">
+      <div className="flex-1 min-w-[280px] flex flex-col items-center -mt-4 md:min-w-0 md:-mt-2 lg:min-w-[280px] lg:-mt-4">
         {currentTrack ? (
           <>
             <div className="flex flex-col items-center mb-0.5">
-              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-brass/80 mb-0.5">
+              <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-brass/80 mb-0.5 hidden lg:block">
                 Now Playing
               </span>
-              <div className="text-[13px] leading-4 font-medium text-frost truncate text-center">
+              <div className="text-[13px] leading-4 font-medium text-frost truncate text-center max-w-[200px] md:text-[11px] md:max-w-[140px] lg:text-[13px] lg:max-w-none">
                 {currentTrack.display_name}
               </div>
             </div>
-            <div className="flex items-center gap-2 w-full mt-4">
-              <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0">
+            <div className="flex items-center gap-2 w-full mt-4 md:mt-2 md:gap-1 lg:mt-4 lg:gap-2">
+              <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0 md:text-[10px] md:w-8 lg:text-[11px] lg:w-10">
                 {formatTime(currentTime)}
               </span>
               <div
@@ -97,7 +98,7 @@ export function TransportBar({
                   style={{ left: `${progress}%`, marginLeft: -4 }}
                 />
               </div>
-              <span className="font-mono text-[11px] text-frost/52 w-10 shrink-0">
+              <span className="font-mono text-[11px] text-frost/52 w-10 shrink-0 md:text-[10px] md:w-8 lg:text-[11px] lg:w-10">
                 {formatTime(duration)}
               </span>
             </div>
@@ -109,36 +110,21 @@ export function TransportBar({
         )}
       </div>
 
-      {/* Sync status label - hidden */}
-      {/* {currentTrack && (
-        <div className="absolute top-4 right-4">
-          <span className={cn(
-            "font-mono text-[8px] uppercase tracking-[0.08em] px-1.5 py-[1px] rounded-full border",
-            syncColors[syncStatus],
-            syncStatus === "synced" ? "border-success/20 bg-success/6" :
-            syncStatus === "buffering" ? "border-brass/20 bg-brass/6" :
-            "border-error/20 bg-error/6",
-          )}>
-            {syncStatus}
-          </span>
-        </div>
-      )} */}
-
       {/* Right zone: NEXT or spacer for balance */}
       {nextTrack ? (
-        <div className="w-[140px] shrink-0 flex items-center justify-end gap-2">
-          <span className="text-[11px] text-soft/50 truncate max-w-[90px]">
+        <div className="w-[140px] shrink-0 flex items-center justify-end gap-2 md:w-auto md:gap-1 lg:w-[140px] lg:gap-2">
+          <span className="text-[11px] text-soft/50 truncate max-w-[90px] hidden lg:block">
             {nextTrack.display_name}
           </span>
           <div className="flex flex-col items-end">
-            <span className="font-mono text-[8px] uppercase tracking-[0.08em] text-frost/32 leading-none mb-0.5">Next</span>
+            <span className="font-mono text-[8px] uppercase tracking-[0.08em] text-frost/32 leading-none mb-0.5 hidden lg:block">Next</span>
             <button onClick={onNext} disabled={!isHost} className="p-0.5 rounded hover:bg-white/[0.06] transition-colors disabled:opacity-30">
               <SkipForward className="w-3.5 h-3.5 text-frost/40" />
             </button>
           </div>
         </div>
       ) : (
-        <div className="w-[60px] shrink-0" />
+        <div className="w-[60px] shrink-0 md:w-[44px] lg:w-[60px]" />
       )}
     </div>
   );
