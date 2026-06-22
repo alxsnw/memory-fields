@@ -981,6 +981,18 @@ export default function FieldPage() {
               <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__srVariant?.mode === 3 && "text-cyan/70")} onClick={() => { (window as any).__srVariant = (window as any).__srVariant || { mode: 0 }; (window as any).__srVariant.mode = 3; }}>
                 SRv3
               </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__adVariant?.mode === -1 && "text-cyan/70")} onClick={() => { (window as any).__adVariant = (window as any).__adVariant || { mode: 0 }; (window as any).__adVariant.mode = -1; }}>
+                AD-1
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__adVariant?.mode === 0 && "text-cyan/70")} onClick={() => { (window as any).__adVariant = (window as any).__adVariant || { mode: 0 }; (window as any).__adVariant.mode = 0; }}>
+                AD0
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__adVariant?.mode === 1 && "text-cyan/70")} onClick={() => { (window as any).__adVariant = (window as any).__adVariant || { mode: 0 }; (window as any).__adVariant.mode = 1; }}>
+                AD1
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__adVariant?.mode === 2 && "text-cyan/70")} onClick={() => { (window as any).__adVariant = (window as any).__adVariant || { mode: 0 }; (window as any).__adVariant.mode = 2; }}>
+                AD2
+              </Button>
             </div>
             {tuneMode && (
               <div className="border-t border-white/[0.06] pt-3">

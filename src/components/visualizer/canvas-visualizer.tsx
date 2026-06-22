@@ -1563,11 +1563,70 @@ const __adChars = [".", ",", ":", ";", "+", "*", "#", "@"];
 const __adState = { noise: new Float32Array(0), phase: 0, bassEnv: 0, highEnv: 0, prevBass: 0, gridCols: 0, gridRows: 0, quality: 1 };
 const __adCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
 const __adCtx = __adCanvas?.getContext("2d") || null;
+const __adVariant = { mode: 0 };
+if (typeof window !== "undefined") (window as any).__adVariant = __adVariant;
+
+function drawArchiveDecoderLegacy(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  __adState.phase += dt;
+  const density = s.density, speed = s.speed;
+  const baseSize = Math.max(4, 10 - density * 6);
+  const cols = Math.ceil(w / baseSize), rows = Math.ceil(h / baseSize), total = cols * rows;
+  if (__adState.noise.length !== total) { __adState.noise = new Float32Array(total); for (let i = 0; i < total; i++) __adState.noise[i] = Math.random(); }
+  const st = __adState, attack = 0.45, release = 0.035;
+  st.bassEnv += (bass - st.bassEnv) * (bass > st.bassEnv ? attack : release);
+  st.highEnv += (highs - st.highEnv) * (highs > st.highEnv ? attack : 0.08);
+  const kick = Math.max(0, bass - st.prevBass) * 4;
+  st.prevBass += (bass - st.prevBass) * 0.15;
+  const bEnv = Math.max(0.1, st.bassEnv), hEnv = st.highEnv;
+  const distortion = kick * 8, expansion = bEnv * 10, corruptProb = Math.min(0.3, hEnv * 0.5 + kick * 0.3), sparkleProb = hEnv * 0.02;
+  ctx.font = `${baseSize}px monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c, nx = c / cols, ny = r / rows;
+      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6 + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 3;
+      const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + bEnv * 0.5 + wave * 0.4));
+      __adState.noise[i] += (signal - __adState.noise[i]) * 0.03;
+      const char = __adChars[Math.min(Math.floor(signal * __adChars.length), __adChars.length - 1)];
+      const corrupted = corruptProb > 0 && Math.random() < corruptProb;
+      const sparkle = sparkleProb > 0 && Math.random() < sparkleProb;
+      const gs = baseSize + expansion * signal;
+      const px = c * gs + gs / 2 + distortion * Math.sin(ny * 10 + kick * 2);
+      const py = r * gs + gs / 2 + distortion * Math.cos(nx * 8 + kick * 1.5);
+      let alpha = Math.max(0.06, signal * 0.5 + bEnv * 0.6);
+      if (corrupted) alpha = Math.min(1, alpha + kick * 0.5);
+      if (sparkle) alpha = Math.min(1, alpha + 0.5);
+      if (sparkle) { ctx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`; }
+      else {
+        const colorIdx = corrupted ? Math.floor(Math.random() * s.palette.length) : Math.floor(signal * s.palette.length) % s.palette.length;
+        ctx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      }
+      ctx.fillText(char, px, py);
+    }
+  }
+  ctx.fillStyle = `rgba(0,0,0,${0.02 + bEnv * 0.03})`;
+  for (let r = 0; r < rows; r += 2) ctx.fillRect(0, r * baseSize, w, 1);
+  if (corruptProb > 0.05 && Math.random() < corruptProb * 0.3) {
+    ctx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.15})`;
+    ctx.fillRect(0, Math.random() * h, w, 2 + Math.random() * 8 + kick * 4);
+  }
+}
 
 function drawArchiveDecoder(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
+  const vm = __adVariant.mode;
+  if (vm === -1) {
+    drawArchiveDecoderLegacy(ctx, w, h, data, len, avg, now, dt, s);
+    return;
+  }
+
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
@@ -1576,10 +1635,39 @@ function drawArchiveDecoder(
   const density = s.density;
   const speed = s.speed;
   const quality = __adState.quality;
-  const scale = 2; // render at 50% resolution
+  const scale = 2;
   const rw = Math.ceil(w / scale);
   const rh = Math.ceil(h / scale);
-  const baseSize = Math.max(5, 12 - density * 8);
+
+  // Variant-specific parameters
+  let baseSize: number, contrastMul: number, noiseInfluence: number, waveInfluence: number, minAlpha: number;
+  let clusterMode = false, rewriteMode = false;
+
+  if (vm === 1) {
+    // AD1 — Dense Signal: smaller glyphs, stronger contrast, less empty space
+    baseSize = Math.max(4, 8 - density * 5);
+    contrastMul = 1.6;
+    noiseInfluence = 0.2;
+    waveInfluence = 0.5;
+    minAlpha = 0.08;
+  } else if (vm === 2) {
+    // AD2 — Animatrix: machine reconstruction, clusters, self-rewriting
+    baseSize = Math.max(5, 10 - density * 6);
+    contrastMul = 2.0;
+    noiseInfluence = 0.35;
+    waveInfluence = 0.35;
+    minAlpha = 0.04;
+    clusterMode = true;
+    rewriteMode = true;
+  } else {
+    // AD0 — Baseline
+    baseSize = Math.max(5, 12 - density * 8);
+    contrastMul = 1.0;
+    noiseInfluence = 0.3;
+    waveInfluence = 0.4;
+    minAlpha = 0.06;
+  }
+
   const cols = Math.ceil(rw / baseSize);
   const rows = Math.ceil(rh / baseSize);
   const total = cols * rows;
@@ -1630,10 +1718,21 @@ function drawArchiveDecoder(
       if (i >= noiseLen) break;
       const nx = c / cols, ny = r / rows;
 
-      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6
+      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6 * waveInfluence
                  + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 3;
-      const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + bEnv * 0.5 + wave * 0.4));
-      __adState.noise[i] += (signal - __adState.noise[i]) * 0.03;
+
+      // AD2: cluster mode — noise dominates, creating emergent clusters
+      let signal: number;
+      if (clusterMode) {
+        signal = Math.max(0, Math.min(0.99, __adState.noise[i] * noiseInfluence + bEnv * 0.6 + wave * 0.4));
+        // Rewrite: periodically reset noise cells on kick
+        if (rewriteMode && kick > 0.8 && __adState.noise[(i * 11) % noiseLen] < kick * 0.3) {
+          __adState.noise[i] = Math.random();
+        }
+      } else {
+        signal = Math.max(0, Math.min(0.99, __adState.noise[i] * noiseInfluence + bEnv * 0.5 + wave * waveInfluence));
+      }
+      __adState.noise[i] += (signal - __adState.noise[i]) * (clusterMode ? 0.05 : 0.03);
 
       const bright = Math.floor(signal * __adChars.length);
       const char = __adChars[Math.min(bright, __adChars.length - 1)];
