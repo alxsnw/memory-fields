@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -115,12 +115,25 @@ const latentFlowConfig: RendererConfig = {
   boost: 1,
 };
 
+const archiveDecoderConfig: RendererConfig = {
+  name: "archive-decoder",
+  opacity: 1,
+  lineWidth: 1,
+  glow: 1,
+  accumDecay: 0.96,
+  densityScale: 1,
+  audioMapStrength: 1,
+  contrast: 1,
+  boost: 1,
+};
+
 const rendererConfigs: Record<string, RendererConfig> = {
   "signal-field": signalFieldConfig,
   "spatial-rhythm": spatialRhythmConfig,
   "particle-memory": particleMemoryConfig,
   "noise-memory": noiseMemoryConfig,
   "latent-flow": latentFlowConfig,
+  "archive-decoder": archiveDecoderConfig,
 };
 
 interface ParticleState {
@@ -319,6 +332,7 @@ export function CanvasVisualizer({
       const particleMemoryAlpha = alphaFor("particle-memory");
       const noiseMemoryAlpha = alphaFor("noise-memory");
       const latentFlowAlpha = alphaFor("latent-flow");
+      const archiveDecoderAlpha = alphaFor("archive-decoder");
 
       // Track which modes are actively rendering for crossfade validation
       const renderingModes: string[] = [];
@@ -327,6 +341,7 @@ export function CanvasVisualizer({
       if (particleMemoryAlpha > 0.01) renderingModes.push("particle-memory");
       if (noiseMemoryAlpha > 0.01) renderingModes.push("noise-memory");
       if (latentFlowAlpha > 0.01) renderingModes.push("latent-flow");
+      if (archiveDecoderAlpha > 0.01) renderingModes.push("archive-decoder");
       debugRef.current.modes = renderingModes;
       debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
 
@@ -334,7 +349,7 @@ export function CanvasVisualizer({
       debugRef.current.activeMode = activeVisualMode;
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
-      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0);
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0) + (archiveDecoderAlpha > 0.01 ? 1 : 0);
       const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       debugRef.current.cfgName = currentCfg.name;
       debugRef.current.globalAlpha = currentCfg.opacity;
@@ -344,7 +359,7 @@ export function CanvasVisualizer({
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
-      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || archiveDecoderAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
         const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
@@ -489,6 +504,13 @@ export function CanvasVisualizer({
           drawLatentFlow(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
           accumCtx.globalAlpha = 1;
         }
+
+        // Archive Decoder layers
+        if (archiveDecoderAlpha > 0.01) {
+          accumCtx.globalAlpha = archiveDecoderAlpha;
+          drawArchiveDecoder(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
       }
       {
         const arr = timings.accumDraw;
@@ -535,6 +557,12 @@ export function CanvasVisualizer({
       if (latentFlowAlpha > 0.01) {
         ctx.globalAlpha = latentFlowAlpha;
         drawLatentFlow(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
+      if (archiveDecoderAlpha > 0.01) {
+        ctx.globalAlpha = archiveDecoderAlpha;
+        drawArchiveDecoder(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         ctx.globalAlpha = 1;
       }
       {
@@ -596,6 +624,8 @@ export function CanvasVisualizer({
           drawNoiseMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
         } else if (activeVisualMode === "latent-flow") {
           drawLatentFlow(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "archive-decoder") {
+          drawArchiveDecoder(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -1393,18 +1423,18 @@ function drawLatentFlow(
     }
   }
 
-  // Update nodes — slow evolution, no rotation
+  // Update nodes — almost no rotation, mostly radial audio-driven motion
   for (let i = 0; i < NODE_COUNT; i++) {
     const n = lf.nodes[i];
-    const na = (nmSmooth(i * 3, lf.time * 0.008 * speed, 0, 1) - 0.5) * randomness;
+    const na = (nmSmooth(i * 3, lf.time * 0.003 * speed, 0, 1) - 0.5) * randomness;
     const nr = (nmSmooth(i * 7, lf.time * 0.006 * speed, 0, 1) - 0.5) * randomness;
-    n.vAngle += na * 0.004 * dtS;
+    n.vAngle += na * 0.0006 * dtS;
     n.vRadius += nr * 0.004 * dtS;
-    n.vRadius += bass * 0.2 * dtS;
-    n.vRadius -= (n.radius - fieldR * 0.8) * 0.004 * dtS;
-    n.vAngle *= 0.993;
-    n.vRadius *= 0.99;
-    n.angle += n.vAngle * dtS * 0.5;
+    n.vRadius += lfDrive * 2 * dtS; // audio-driven expansion
+    n.vRadius -= (n.radius - fieldR * 0.8) * 0.003 * dtS;
+    n.vAngle *= 0.998;
+    n.vRadius *= 0.97;
+    n.angle += n.vAngle * dtS * 0.2;
     n.radius += n.vRadius * dtS;
     n.radius = Math.max(fieldR * 0.3 * globalScale, Math.min(fieldR * 1.3 * globalScale, n.radius));
   }

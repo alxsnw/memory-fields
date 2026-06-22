@@ -4,6 +4,7 @@ export type VisualModel =
   | "particle-memory"
   | "noise-memory"
   | "latent-flow"
+  | "archive-decoder"
   | "topographic-wave"
   | "orbital-spectrum"
   | "spectral-grid"
