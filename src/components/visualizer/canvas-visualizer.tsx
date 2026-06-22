@@ -40,6 +40,7 @@ const __lfState = {
   nodes: [] as { angle: number; radius: number; vAngle: number; vRadius: number; phase: number; targetConnections: number[] }[],
   connections: [] as { from: number; to: number; age: number }[],
   reconnectTimer: 0,
+  env: 0,
 };
 
 interface RendererConfig {
@@ -1336,6 +1337,18 @@ function drawLatentFlow(
   const lf = __lfState;
   const dtS = Math.min(dt * 60, 3);
 
+  // Audio envelope: fast attack, slow release
+  const audioIn = Math.min(1, bass * 3 + avg * 1.5);
+  lf.env += (audioIn - lf.env) * (audioIn > lf.env ? 0.3 : 0.04);
+  const lfDrive = Math.max(0.15, lf.env); // never fully silent
+
+  // Scale everything from the envelope
+  const globalScale = 0.5 + lfDrive * 0.5;        // 0.5–1.0
+  const corePulse = 0.6 + lfDrive * 0.8;           // 0.6–1.4
+  const tension = 0.5 + lfDrive * 1.5;              // 0.5–2.0
+  const alphaBoost = 0.3 + lfDrive * 1.2;           // 0.3–1.5
+  const nodeScale = 0.3 + lfDrive * 1.2;            // 0.3–1.5
+
   // Init 96 nodes
   if (lf.nodes.length !== NODE_COUNT) {
     lf.nodes = Array.from({ length: NODE_COUNT }, (_, i) => ({
@@ -1380,32 +1393,54 @@ function drawLatentFlow(
     }
   }
 
-  // Update nodes
+  // Update nodes — slow evolution, no rotation
   for (let i = 0; i < NODE_COUNT; i++) {
     const n = lf.nodes[i];
-    const na = nmSmooth(i * 3, lf.time * 0.05 * speed, 0, 1) - 0.5;
-    const nr = nmSmooth(i * 7, lf.time * 0.04 * speed, 0, 1) - 0.5;
-    n.vAngle += na * randomness * 0.015 * dtS;
-    n.vRadius += nr * randomness * 0.015 * dtS;
-    n.vRadius += bass * 0.3 * dtS; // bass pushes outward
-    n.vRadius -= (n.radius - fieldR * 0.8) * 0.008 * dtS;
-    n.vAngle *= 0.97;
-    n.vRadius *= 0.97;
-    n.angle += n.vAngle * dtS;
+    const na = (nmSmooth(i * 3, lf.time * 0.008 * speed, 0, 1) - 0.5) * randomness;
+    const nr = (nmSmooth(i * 7, lf.time * 0.006 * speed, 0, 1) - 0.5) * randomness;
+    n.vAngle += na * 0.004 * dtS;
+    n.vRadius += nr * 0.004 * dtS;
+    n.vRadius += bass * 0.2 * dtS;
+    n.vRadius -= (n.radius - fieldR * 0.8) * 0.004 * dtS;
+    n.vAngle *= 0.993;
+    n.vRadius *= 0.99;
+    n.angle += n.vAngle * dtS * 0.5;
     n.radius += n.vRadius * dtS;
-    n.radius = Math.max(fieldR * 0.3, Math.min(fieldR * 1.3, n.radius));
+    n.radius = Math.max(fieldR * 0.3 * globalScale, Math.min(fieldR * 1.3 * globalScale, n.radius));
+  }
+
+  // Slow connection reorganization (5-15s intervals)
+  lf.reconnectTimer += dt;
+  if (lf.reconnectTimer > 5 + mids * 5 || lf.connections.length === 0) {
+    lf.reconnectTimer = 0;
+    for (let i = 0; i < NODE_COUNT; i++) {
+      const count = 1 + Math.floor(nmSmooth(i * 13, lf.time * 0.02, 0, 1) * 3);
+      lf.nodes[i].targetConnections = [];
+      for (let c = 0; c < count; c++) {
+        const target = Math.floor(nmSmooth(i * 17 + c * 97, lf.time * 0.03, 0, 1) * NODE_COUNT) % NODE_COUNT;
+        if (target !== i && !lf.nodes[i].targetConnections.includes(target)) {
+          lf.nodes[i].targetConnections.push(target);
+        }
+      }
+    }
+    const connSet = new Set<string>();
+    for (let i = 0; i < NODE_COUNT; i++) {
+      for (const t of lf.nodes[i].targetConnections) {
+        const key = Math.min(i, t) + "-" + Math.max(i, t);
+        if (!connSet.has(key)) { connSet.add(key); lf.connections.push({ from: i, to: t, age: 0 }); }
+      }
+    }
+    if (lf.connections.length > NODE_COUNT * 2) lf.connections = lf.connections.slice(-NODE_COUNT * 2);
   }
 
   // Age connections
   for (const c of lf.connections) c.age += dt;
-
-  // Layer 1: Background particles (tiny floating dots)
   const bgCount = Math.floor(30 + density * 40);
   for (let i = 0; i < bgCount; i++) {
     const seed = i * 73.1;
     const bx = (nmSmooth(seed, lf.time * 0.02, 0, 1) * 0.9 + 0.05) * w;
     const by = (nmSmooth(lf.time * 0.02, seed, 0, 1) * 0.9 + 0.05) * h;
-    const ba = 0.03 + nmSmooth(seed * 2, lf.time * 0.04, 0, 1) * 0.04;
+    const ba = (0.03 + nmSmooth(seed * 2, lf.time * 0.04, 0, 1) * 0.04) * alphaBoost;
     ctx.beginPath();
     ctx.arc(bx, by, 0.3 + highs * 0.5, 0, Math.PI * 2);
     ctx.fillStyle = s.palette[i % s.palette.length] + Math.floor(ba * 255).toString(16).padStart(2, "0");
@@ -1413,7 +1448,7 @@ function drawLatentFlow(
   }
 
   // Layer 2: Connection network
-  const tension = 1 + bass * 1.2;
+  const connAlpha = 0.06 + bass * 0.3 + mids * 0.1;
   for (const c of lf.connections) {
     const n1 = lf.nodes[c.from];
     const n2 = lf.nodes[c.to];
@@ -1431,12 +1466,12 @@ function drawLatentFlow(
     const cp2x = midX + Math.cos(n2.angle + noiseOff * 0.7) * fieldR * 0.15 * tension;
     const cp2y = midY + Math.sin(n2.angle + noiseOff * 0.7) * fieldR * 0.15 * tension;
 
-    const alpha = Math.max(0.03, 0.06 + bass * 0.3 + mids * 0.1) * Math.min(1, c.age * 2);
+    const alpha = Math.max(0.03, connAlpha * alphaBoost) * Math.min(1, c.age * 2);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
     ctx.strokeStyle = getColor(c.from, s.palette, NODE_COUNT) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 0.3 + bass * 1 + glow * 0.3;
+    ctx.lineWidth = 0.3 + bass * 1 + glow * 0.3 + tension * 0.5;
     ctx.stroke();
   }
 
@@ -1445,8 +1480,8 @@ function drawLatentFlow(
     const n = lf.nodes[i];
     const nx = cx + Math.cos(n.angle) * n.radius;
     const ny = cy + Math.sin(n.angle) * n.radius;
-    const ns = 0.5 + bass * 1.5 + highs * 1;
-    const na = Math.max(0.04, 0.1 + bass * 0.3 + highs * 0.2);
+    const ns = (0.5 + bass * 1.5 + highs * 1) * nodeScale;
+    const na = Math.max(0.04, (0.1 + bass * 0.3 + highs * 0.2) * alphaBoost);
 
     // Glow
     const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, ns * 4);
@@ -1468,20 +1503,20 @@ function drawLatentFlow(
   ctx.globalAlpha = 1;
 
   // Layer 4: Central core glow
-  const coreSize = Math.min(w, h) * 0.04 * (0.5 + bass * 0.5);
-  const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 8);
-  coreGlow.addColorStop(0, s.palette[0] + "35");
-  coreGlow.addColorStop(0.5, s.palette[1 % s.palette.length] + "18");
+  const coreSize = Math.min(w, h) * 0.04 * corePulse;
+  const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 10);
+  coreGlow.addColorStop(0, s.palette[0] + "40");
+  coreGlow.addColorStop(0.5, s.palette[1 % s.palette.length] + "20");
   coreGlow.addColorStop(1, "transparent");
   ctx.fillStyle = coreGlow;
   ctx.beginPath();
-  ctx.arc(cx, cy, coreSize * 8, 0, Math.PI * 2);
+  ctx.arc(cx, cy, coreSize * 10, 0, Math.PI * 2);
   ctx.fill();
 
   for (let i = 2; i >= 0; i--) {
-    const r = coreSize * (1 + i * 0.6 + bass * 0.3);
+    const r = coreSize * (1 + i * 0.6 + lfDrive * 0.5);
     const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    const ca = Math.floor(Math.max(0.12, glow * (0.3 + bass * 0.4)) * 50 * (1 - i * 0.2)).toString(16).padStart(2, "0");
+    const ca = Math.floor(Math.max(0.12, glow * (0.3 + lfDrive * 0.8)) * 50 * (1 - i * 0.2)).toString(16).padStart(2, "0");
     gr.addColorStop(0, s.palette[0] + ca);
     gr.addColorStop(0.6, s.palette[1 % s.palette.length] + ca);
     gr.addColorStop(1, "transparent");
