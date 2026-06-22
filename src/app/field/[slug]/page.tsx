@@ -237,7 +237,7 @@ export default function FieldPage() {
 
   const defaultVisualParams: VisualParams = {
     intensity: 0.5, coreTraceAmount: 0, density: 0.5, speed: 0.5, memory: 0.5, detail: 0.5,
-    glow: 0.4, randomness: 0.3, smoothing: true, smoothingAmount: 0.3,
+    glow: 0.4, randomness: 0.3, vhsAmount: 0, glitchAmount: 0, smoothing: true, smoothingAmount: 0.3,
     coreSize: 0.5, expansion: 0.5, edgeReactivity: 0.5, centerBias: 0.5,
     bloom: 0.3, grain: 0, grainIntensity: 0.5, grainSize: 0.5,
     chromatic: 0.2, scanlines: 0, vignette: 0.3, crtCurve: 0, phosphor: 0,
