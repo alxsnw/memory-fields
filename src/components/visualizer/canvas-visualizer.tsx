@@ -17,6 +17,7 @@ interface CanvasVisualizerProps {
   transitionProgress?: number;
   idleTransitionProgress?: number;
   paletteMode?: string;
+  renderStyle?: string;
   liveSliderRef?: { current: { coreTraceAmount?: number; density?: number; speed?: number } };
   benchRef?: { current: { dprOverride?: number } };
 }
@@ -35,6 +36,7 @@ const __srSmooth = { low: 0, prevRaw: 0 };
 const __glitchState = { timer: 0, nextGlitch: 5, glitchTimer: 0, isGlitching: false, tearX: 0 };
 const __srVariant = { mode: 0 };
 if (typeof window !== "undefined") (window as any).__srVariant = __srVariant;
+let __renderStyle = "native";
 const __lfState = {
   time: 0,
   nodes: [] as { angle: number; radius: number; vAngle: number; vRadius: number; phase: number; targetConnections: number[] }[],
@@ -235,6 +237,7 @@ export function CanvasVisualizer({
   transitionProgress = 1,
   idleTransitionProgress = 1,
   paletteMode = "mineral",
+  renderStyle = "native",
   liveSliderRef,
   benchRef,
 }: CanvasVisualizerProps) {
@@ -309,6 +312,7 @@ export function CanvasVisualizer({
 
     // Use live slider value during drag for responsive feel
     const effCoreTrace = liveSliderRef?.current?.coreTraceAmount ?? coreTraceAmount;
+    __renderStyle = renderStyle;
 
     // Accumulation decay
     if (accumCtx && isPlaying) {
@@ -769,7 +773,7 @@ export function CanvasVisualizer({
     debugRef.current.frameTime = frameT;
     debugRef.current.renderTime = rollingAvg(ftArr);
     debugRef.current.avgFps = ftArr.length > 1 ? Math.round((ftArr.length - 1) / ((ftArr[ftArr.length - 1] - ftArr[0]) / 1000)) : 60;
-  }, [state, analyserNode, isPlaying, glitchAmount, vhsAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
+  }, [state, analyserNode, isPlaying, glitchAmount, vhsAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode, renderStyle]);
   drawRef.current = draw;
 
   useEffect(() => {
@@ -1929,6 +1933,7 @@ function drawTopographicWave(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
+  if (__renderStyle === "ascii") { drawTopographicWaveASCII(ctx, w, h, data, len, avg, now, dt, s); return; }
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
@@ -1958,6 +1963,7 @@ function drawOrbitalSpectrum(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
+  if (__renderStyle === "ascii") { drawOrbitalSpectrumASCII(ctx, w, h, data, len, avg, now, dt, s); return; }
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
@@ -2036,6 +2042,7 @@ function drawPulseField(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
+  if (__renderStyle === "ascii") { drawPulseFieldASCII(ctx, w, h, data, len, avg, now, dt, s); return; }
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
@@ -2123,6 +2130,100 @@ function drawPulseField(
   ctx.beginPath();
   ctx.arc(cx, cy, coreSize * 5, 0, Math.PI * 2);
   ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/* ── ASCII Pulse Field ── */
+function drawPulseFieldASCII(ctx: CanvasRenderingContext2D, w: number, h: number, _data: Uint8Array, _len: number, _avg: number, now: number, _dt: number, s: InterpolatedState) {
+  const bass = _data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = _data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = _data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const cx = w / 2, cy = h / 2, maxR = Math.min(w, h) * 0.45;
+  const chars = [".", ",", ":", ";", "+", "*", "#", "@"];
+  ctx.font = "8px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const ringCount = 6;
+  for (let r = 0; r < ringCount; r++) {
+    const ringR = (maxR / ringCount) * (r + 1) * (0.5 + bass * 0.5);
+    const steps = Math.floor(ringR * 0.3);
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2 + now * 0.02;
+      const px = cx + Math.cos(a) * ringR;
+      const py = cy + Math.sin(a) * ringR;
+      const ci = Math.floor((r / ringCount + bass * 0.5) * chars.length) % chars.length;
+      ctx.fillStyle = s.palette[ci % s.palette.length] + Math.floor((0.1 + bass * 0.3) * 255).toString(16).padStart(2, "0");
+      ctx.fillText(chars[ci], px, py);
+    }
+  }
+  // Vertical glyph bursts
+  const spikeCount = 16;
+  for (let i = 0; i < spikeCount; i++) {
+    const a = (i / spikeCount) * Math.PI * 2;
+    const idx = Math.floor((i / spikeCount) * _len);
+    const val = _data[idx] / 255;
+    const hgt = val * 60 * (0.5 + bass * 0.5);
+    const px = cx + Math.cos(a) * maxR * 0.5;
+    const py = cy + Math.sin(a) * maxR * 0.5;
+    for (let h = 0; h < hgt; h += 6) {
+      const ci = Math.floor((h / hgt + highs * 0.5) * chars.length) % chars.length;
+      ctx.fillStyle = s.palette[(i + h) % s.palette.length] + Math.floor((0.15 + val * 0.4 + highs * 0.2) * 255).toString(16).padStart(2, "0");
+      ctx.fillText(chars[ci], px, py - h);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── ASCII Orbital Spectrum ── */
+function drawOrbitalSpectrumASCII(ctx: CanvasRenderingContext2D, w: number, h: number, _data: Uint8Array, _len: number, _avg: number, now: number, _dt: number, s: InterpolatedState) {
+  const bass = _data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const highs = _data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const cx = w / 2, cy = h / 2;
+  const chars = [".", ",", ":", ";", "+", "*", "#", "@"];
+  ctx.font = "7px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const orbitCount = 4;
+  for (let o = 0; o < orbitCount; o++) {
+    const or = Math.min(w, h) * 0.08 * (1 + o * 1.2) * (0.5 + bass * 0.5);
+    const steps = Math.floor(or * 0.4);
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2 + now * (0.05 + o * 0.03);
+      const px = cx + Math.cos(a) * or;
+      const py = cy + Math.sin(a) * or * 0.6;
+      const ci = o % chars.length;
+      ctx.fillStyle = s.palette[ci] + "25";
+      ctx.fillText(chars[ci], px, py);
+    }
+  }
+  // Core character cluster
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * 15 * (0.5 + bass * 0.5);
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r;
+    const ci = Math.floor(bass * chars.length) % chars.length;
+    ctx.fillStyle = s.palette[0] + Math.floor((0.3 + bass * 0.4 + highs * 0.2) * 255).toString(16).padStart(2, "0");
+    ctx.fillText(chars[ci], px, py);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── ASCII Topographic Wave ── */
+function drawTopographicWaveASCII(ctx: CanvasRenderingContext2D, w: number, h: number, _data: Uint8Array, _len: number, _avg: number, now: number, _dt: number, s: InterpolatedState) {
+  const bass = _data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const highs = _data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const chars = [".", ",", ":", ";", "+", "*", "#", "@"];
+  ctx.font = "6px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const rows = Math.floor(20 + s.density * 20);
+  const cols = Math.floor(40 + s.density * 30);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const nx = c / cols, ny = r / rows;
+      const val = Math.sin(nx * 8 + ny * 6 + now * 0.05) * bass * 2 + Math.cos(nx * 4 + now * 0.03) * 0.5;
+      const signal = Math.max(0, Math.min(1, 0.5 + val * 0.5));
+      const ci = Math.floor(signal * chars.length) % chars.length;
+      const alpha = 0.05 + signal * 0.4 + highs * 0.2;
+      ctx.fillStyle = s.palette[ci % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      ctx.fillText(chars[ci], c * (w / cols), r * (h / rows));
+    }
+  }
   ctx.globalAlpha = 1;
 }
 

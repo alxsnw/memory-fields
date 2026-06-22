@@ -1095,7 +1095,8 @@ export default function FieldPage() {
             </div>
             <FieldControls
               visualModel={activeVisualMode}
-              paletteMode={roomState?.palette_mode || "mineral"}
+          paletteMode={roomState?.palette_mode || "mineral"}
+          renderStyle={(visualParams as any)._renderStyle || "native"}
               visualParams={visualParams}
               isHost={isHost}
               onModelChange={handleModelChange}

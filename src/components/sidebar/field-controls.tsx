@@ -243,6 +243,29 @@ export function FieldControls({
           </div>
         </div>
 
+        {/* Render Style */}
+        <div className="border-b border-white/[0.06] pb-3 mb-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle mb-2">Render Style</div>
+          <div className="flex gap-1.5">
+            {(["native", "ascii"] as const).map((style) => (
+              <button
+                key={style}
+                onClick={() => isHost && onParamChange({ _renderStyle: style } as any)}
+                disabled={!isHost}
+                className={cn(
+                  "flex-1 px-2 py-1.5 rounded-lg border text-[10px] font-mono uppercase tracking-[0.06em] transition-colors",
+                  ((visualParams as any)._renderStyle || "native") === style
+                    ? "bg-white/[0.06] border-white/[0.14] text-frost"
+                    : "bg-white/[0.02] border-white/[0.06] text-subtle hover:bg-white/[0.04]",
+                  !isHost && "opacity-60 cursor-not-allowed",
+                )}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Advanced (collapsed) */}
         <Section title="Advanced" defaultOpen={false}>
           {renderAdvancedSliders()}
