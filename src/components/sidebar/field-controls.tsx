@@ -49,7 +49,7 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
   );
 }
 
-const scale = (v: number) => Math.round(v * 100);
+const scale = (v: number | undefined) => Math.round((v ?? 0) * 100);
 const unscale = (v: number) => v / 100;
 
 export function FieldControls({
