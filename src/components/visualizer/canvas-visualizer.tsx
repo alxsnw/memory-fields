@@ -1560,7 +1560,9 @@ function drawLatentFlow(
 
 /* ── Archive Decoder ── */
 const __adChars = [".", ",", ":", ";", "+", "*", "#", "@"];
-const __adState = { noise: new Float32Array(0), phase: 0, bassEnv: 0, highEnv: 0, prevBass: 0 };
+const __adState = { noise: new Float32Array(0), phase: 0, bassEnv: 0, highEnv: 0, prevBass: 0, gridCols: 0, gridRows: 0, quality: 1 };
+const __adCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+const __adCtx = __adCanvas?.getContext("2d") || null;
 
 function drawArchiveDecoder(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
@@ -1573,64 +1575,77 @@ function drawArchiveDecoder(
   __adState.phase += dt;
   const density = s.density;
   const speed = s.speed;
-  const baseSize = Math.max(4, 10 - density * 6);
-  const cols = Math.ceil(w / baseSize);
-  const rows = Math.ceil(h / baseSize);
+  const quality = __adState.quality;
+  const scale = 2; // render at 50% resolution
+  const rw = Math.ceil(w / scale);
+  const rh = Math.ceil(h / scale);
+  const baseSize = Math.max(5, 12 - density * 8);
+  const cols = Math.ceil(rw / baseSize);
+  const rows = Math.ceil(rh / baseSize);
   const total = cols * rows;
 
+  __adState.gridCols = cols;
+  __adState.gridRows = rows;
+
+  // Init noise buffer
   if (__adState.noise.length !== total) {
     __adState.noise = new Float32Array(total);
     for (let i = 0; i < total; i++) __adState.noise[i] = Math.random();
   }
 
-  // Audio envelopes: fast attack, slow release
+  // Audio envelopes
   const st = __adState;
   const attack = 0.45, release = 0.035;
   st.bassEnv += (bass - st.bassEnv) * (bass > st.bassEnv ? attack : release);
   st.highEnv += (highs - st.highEnv) * (highs > st.highEnv ? attack : 0.08);
-
-  // Transient/kick detection
   const kick = Math.max(0, bass - st.prevBass) * 4;
   st.prevBass += (bass - st.prevBass) * 0.15;
-
   const bEnv = Math.max(0.1, st.bassEnv);
   const hEnv = st.highEnv;
-
-  // Grid distortion on kick/bass
-  const distortion = kick * 8;       // pixel displacement
-  const expansion = bEnv * 10;       // glyph size surge
+  const distortion = kick * 8;
+  const expansion = bEnv * 8;
   const corruptProb = Math.min(0.3, hEnv * 0.5 + kick * 0.3);
 
-  // Per-glyph corruption sparkle
-  const sparkleProb = hEnv * 0.02;
+  // Setup offscreen canvas
+  const oc = __adCanvas;
+  const octx = __adCtx;
+  if (!oc || !octx) return;
+  if (oc.width !== rw || oc.height !== rh) {
+    oc.width = rw;
+    oc.height = rh;
+  }
+  octx.clearRect(0, 0, rw, rh);
+  octx.fillStyle = "#030405";
+  octx.fillRect(0, 0, rw, rh);
+  octx.font = `${baseSize}px monospace`;
+  octx.textAlign = "center";
+  octx.textBaseline = "middle";
 
-  ctx.font = `${baseSize}px monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  // Noise-based stochastic values (no Math.random per cell)
+  const noiseLen = __adState.noise.length;
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
+      if (i >= noiseLen) break;
       const nx = c / cols, ny = r / rows;
 
-      // Waves: amplitude scales with bass envelope
       const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6
                  + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 3;
       const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + bEnv * 0.5 + wave * 0.4));
       __adState.noise[i] += (signal - __adState.noise[i]) * 0.03;
 
-      // Glyph choice
       const bright = Math.floor(signal * __adChars.length);
       const char = __adChars[Math.min(bright, __adChars.length - 1)];
 
-      // Corruption / sparkle
-      const corrupted = corruptProb > 0 && Math.random() < corruptProb;
-      const sparkle = sparkleProb > 0 && Math.random() < sparkleProb;
+      // Use noise buffer instead of Math.random for corruption/sparkle
+      const noiseVal = __adState.noise[(i * 7) % noiseLen];
+      const corrupted = corruptProb > 0 && noiseVal < corruptProb;
+      const sparkle = noiseVal > 0.98;
 
-      // Grid coordinate distortion on bass/kick
+      const gs = baseSize + expansion * signal;
       const distortX = distortion * Math.sin(ny * 10 + kick * 2);
       const distortY = distortion * Math.cos(nx * 8 + kick * 1.5);
-      const gs = baseSize + expansion * signal;
       const px = c * gs + gs / 2 + distortX;
       const py = r * gs + gs / 2 + distortY;
 
@@ -1638,30 +1653,34 @@ function drawArchiveDecoder(
       if (corrupted) alpha = Math.min(1, alpha + kick * 0.5);
       if (sparkle) alpha = Math.min(1, alpha + 0.5);
 
-      let colorIdx = Math.floor(signal * s.palette.length) % s.palette.length;
-      if (corrupted) colorIdx = Math.floor(Math.random() * s.palette.length);
       if (sparkle) {
-        ctx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`;
+        octx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`;
       } else {
-        ctx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+        const colorIdx = corrupted ? Math.floor(noiseVal * s.palette.length) % s.palette.length : Math.floor(signal * s.palette.length) % s.palette.length;
+        octx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
       }
-      ctx.fillText(char, px, py);
+      octx.fillText(char, px / scale, py / scale);
     }
   }
 
-  // Scanlines with bass-driven intensity
-  ctx.fillStyle = `rgba(0,0,0,${0.02 + bEnv * 0.03})`;
+  // Scanlines on offscreen
+  octx.fillStyle = `rgba(0,0,0,${0.02 + bEnv * 0.03})`;
   for (let r = 0; r < rows; r += 2) {
-    ctx.fillRect(0, r * baseSize, w, 1);
+    octx.fillRect(0, r * baseSize, rw, 1);
   }
 
-  // Corruption bands driven by highs + kick
-  if (corruptProb > 0.05 && Math.random() < corruptProb * 0.3) {
-    const bandY = Math.random() * h;
+  // Corruption bands
+  if (corruptProb > 0.05 && __adState.noise[Math.floor((__adState.phase * 31) % noiseLen)] < corruptProb * 0.3) {
+    const bandY = Math.random() * rh;
     const bandH = 2 + Math.random() * 8 + kick * 4;
-    ctx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.15})`;
-    ctx.fillRect(0, bandY, w, bandH);
+    octx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.15})`;
+    octx.fillRect(0, bandY, rw, bandH);
   }
+
+  // Scale up to main canvas
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(oc, 0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
 }
 
 /* ── Glitch / VHS post-processing ── */
