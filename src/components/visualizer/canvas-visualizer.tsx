@@ -30,8 +30,6 @@ const FLOORS = {
 };
 
 let __connCounter = 0;
-let __lowEnergy = 0;
-let __transient = 0;
 
 interface RendererConfig {
   name: string;
@@ -169,8 +167,7 @@ export function CanvasVisualizer({
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
   const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
-  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "", cfgName: "", accumDecay: 0, globalAlpha: 1, boost: 1, contrast: 1, lineWidth: 1, subRaw: 0, bassRaw: 0, lowMidRaw: 0, subEnv: 0, bassEnv: 0, lowEnergy: 0, midRaw: 0, highRaw: 0, rms: 0, transient: 0 });
-  const bassEnvRef = useRef({ sub: 0, bass: 0, lowMid: 0 });
+  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "", cfgName: "", accumDecay: 0, globalAlpha: 1, boost: 1, contrast: 1, lineWidth: 1 });
   const connCountRef = useRef(0);
   const timingRef = useRef({
     audioAnalysis: [] as number[],
@@ -260,40 +257,10 @@ export function CanvasVisualizer({
       const bufferLength = analyserNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       analyserNode.getByteFrequencyData(dataArray);
-      
-      // Frequency bands mapped to ~20-400Hz range (fftSize=256, ~44100Hz)
-      const subRaw = dataArray[0] / 255;
-      const bassRaw = dataArray.slice(0, 2).reduce((a, b) => a + b, 0) / (2 * 255);
-      const lowMidRaw = dataArray.slice(1, 3).reduce((a, b) => a + b, 0) / (2 * 255);
-      const midRaw = dataArray.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
-      const highRaw = dataArray.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
-      const rms = Math.sqrt(dataArray.reduce((s, v) => s + (v / 255) * (v / 255), 0) / bufferLength);
-
-      // Compression curve: boost quiet signals, keep loud peaks controlled
-      const compress = (v: number) => Math.pow(v, 0.65);
-      const subComp = compress(subRaw);
-      const bassComp = compress(bassRaw);
-      const lowMidComp = compress(lowMidRaw);
-
-      // Smoothed envelopes: fast attack, slow release
-      const env = bassEnvRef.current;
-      const attack = 0.4;
-      const release = 0.08;
-      env.sub += (subComp - env.sub) * (subComp > env.sub ? attack : release);
-      env.bass += (bassComp - env.bass) * (bassComp > env.bass ? attack : release);
-      env.lowMid += (lowMidComp - env.lowMid) * (lowMidComp > env.lowMid ? attack : release);
-
-      // Combined low-energy drive with strong multipliers
-      const lowEnergy = Math.min(1, env.sub * 3.0 + env.bass * 2.5 + env.lowMid * 1.0);
-
-      // Transient: sudden jump in low-end (kick detection)
-      const transient = Math.max(0, subComp - env.sub * 0.5) * 4; // spike on attack
-
-      // Standard bands for non-low-end use
       const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
-      const mids = compress(midRaw);
-      const highs = highRaw;
-
+      const bass = dataArray.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+      const mids = dataArray.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+      const highs = dataArray.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
       const timings = timingRef.current;
       const tArr = timings.audioAnalysis;
       tArr.push(performance.now() - tAudio);
@@ -330,18 +297,6 @@ export function CanvasVisualizer({
       debugRef.current.boost = currentCfg.boost;
       debugRef.current.contrast = currentCfg.contrast;
       debugRef.current.lineWidth = currentCfg.lineWidth;
-      debugRef.current.subRaw = subRaw;
-      debugRef.current.bassRaw = bassRaw;
-      debugRef.current.lowMidRaw = lowMidRaw;
-      debugRef.current.subEnv = env.sub;
-      debugRef.current.bassEnv = env.bass;
-      debugRef.current.lowEnergy = lowEnergy;
-      debugRef.current.midRaw = midRaw;
-      debugRef.current.highRaw = highRaw;
-      debugRef.current.rms = rms;
-      debugRef.current.transient = transient;
-      __lowEnergy = lowEnergy;
-      __transient = transient;
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
@@ -372,11 +327,10 @@ export function CanvasVisualizer({
         const isKick = bassDeriv > 1.8 && bass > 0.25;
 
         const particles = particleMemRef.current;
-        const pmDrive = Math.min(1, bass + __lowEnergy * 0.5 + __transient * 0.3);
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           const val = dataArray[Math.min(p.freqBin, bufferLength - 1)] / 255;
-          p.activity = val * 0.5 + pmDrive * 0.5;
+          p.activity = val * 0.5 + bass * 0.3 + mids * 0.2;
 
           const dx = p.x - w / 2;
           const dy = p.y - h / 2;
@@ -389,8 +343,8 @@ export function CanvasVisualizer({
           const flowVx = -ny * orbitStrength;
           const flowVy = nx * orbitStrength;
 
-          // Bass: outward pressure (boosted by drive + transient)
-          const bassPush = pmDrive * 3.0 * sensitivity * flowMul;
+          // Bass: outward pressure
+          const bassPush = bass * 2.0 * sensitivity * flowMul;
           const pushVx = nx * bassPush * (1 - p.depth * 0.3);
           const pushVy = ny * bassPush * (1 - p.depth * 0.3);
 
@@ -519,12 +473,6 @@ export function CanvasVisualizer({
         if (arr.length > 120) arr.shift();
       }
       debugRef.current.connectionCount = __connCounter;
-      debugRef.current.subRaw = subRaw;
-      debugRef.current.bassRaw = bassRaw;
-      debugRef.current.lowMidRaw = lowMidRaw;
-      debugRef.current.subEnv = env.sub;
-      debugRef.current.bassEnv = env.bass;
-      debugRef.current.lowEnergy = lowEnergy;
 
       // Glitch pass
       if (glitchAmount > 0) {
@@ -655,8 +603,6 @@ export function CanvasVisualizer({
           {debugRef.current.layers}lyr {debugRef.current.modes.join("+")}
         </div>
         {debugRef.current.warning && <div className="text-red/80 font-bold">{debugRef.current.warning}</div>}
-        <div className="text-frost/20">SUB:{debugRef.current.subRaw.toFixed(2)}→{debugRef.current.subEnv.toFixed(2)} B:{debugRef.current.bassRaw.toFixed(2)}→{debugRef.current.bassEnv.toFixed(2)} M:{debugRef.current.midRaw.toFixed(2)} H:{debugRef.current.highRaw.toFixed(2)}</div>
-        <div className="text-frost/20">LO:{debugRef.current.lowEnergy.toFixed(2)} TR:{debugRef.current.transient.toFixed(2)} RMS:{debugRef.current.rms.toFixed(2)}</div>
         <div className="text-frost/20">q{perfRef.current.quality.toFixed(2)}</div>
       </div>
     </>
@@ -742,12 +688,9 @@ function drawCore(
   const cx = w / 2;
   const cy = h / 2;
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
-  const lo = __lowEnergy;
-  const tr = __transient;
-  const drive = Math.min(1, bass + lo * 0.5 + tr * 0.3);
   const pulse = Math.sin(now * 0.5) * 0.5 + 0.5;
-  const coreSize = Math.min(w, h) * 0.04 * s.fieldScale * (0.5 + avg * 0.5 + drive * 0.5);
-  const glow = Math.max(FLOORS.coreGlow, s.glow * (0.6 + avg * 0.4 + tr * 0.3));
+  const coreSize = Math.min(w, h) * 0.04 * s.fieldScale * (0.5 + avg * 0.5 + bass * 0.3);
+  const glow = Math.max(FLOORS.coreGlow, s.glow * (0.6 + avg * 0.4));
 
   for (let i = 2; i >= 0; i--) {
     const radius = coreSize * (1 + i * 0.7 + pulse * 0.15);
@@ -770,34 +713,30 @@ function drawSignalField(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
+  // Fullscreen brightness pulse driven by RMS
+  const pulse = Math.max(0.1, avg * s.audioSensitivity * 0.3);
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
-  const lo = __lowEnergy * 2;
-  const tr = __transient * 3;
-  const drive = Math.min(1, avg + lo + tr);
 
-  // Fullscreen brightness pulse
-  const pulse = Math.max(0.25, drive * s.audioSensitivity * 1.2);
-
-  // Large signal ripples driven by lowEnergy + transient
-  const rippleCount = 3 + Math.floor(s.density * 3 + lo * 4);
+  // Large signal ripples
+  const rippleCount = 3 + Math.floor(s.density * 3);
   for (let r = 0; r < rippleCount; r++) {
     const phase = now * (0.15 + s.speed * 0.2) + r * 2.1;
     const rippleRadius = ((Math.sin(phase) * 0.5 + 0.5) * 0.6 + 0.2) * Math.max(w, h) * 0.5;
     const cx = w / 2 + Math.sin(now * 0.05 + r) * w * 0.08;
     const cy = h / 2 + Math.cos(now * 0.04 + r * 0.7) * h * 0.08;
-    const width = 30 + bass * 60 + lo * 80;
+    const width = 30 + bass * 60;
 
     const gr = ctx.createRadialGradient(cx, cy, rippleRadius - width, cx, cy, rippleRadius + width);
     gr.addColorStop(0, "transparent");
-    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + drive * 60).toString(16).padStart(2, "0"));
-    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + drive * 45).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + avg * 25).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + avg * 18).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.beginPath();
     ctx.arc(cx, cy, rippleRadius + width, 0, Math.PI * 2);
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 1.0);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.5);
     ctx.fill();
   }
 
@@ -808,10 +747,10 @@ function drawSignalField(
     const sx = w / 2 + Math.cos(angle) * Math.max(w, h) * 0.6;
     const sy = h / 2 + Math.sin(angle) * Math.max(w, h) * 0.6;
     const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(w, h) * 0.8);
-    gr.addColorStop(0, s.palette[i % s.palette.length] + Math.floor(4 + highs * 20 + lo * 15).toString(16).padStart(2, "0"));
+    gr.addColorStop(0, s.palette[i % s.palette.length] + Math.floor(4 + highs * 20).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.4);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.25);
     ctx.fillRect(0, 0, w, h);
   }
 
@@ -842,15 +781,12 @@ function drawSpatialRhythm(
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
-  const lo = __lowEnergy * 2;
-  const tr = __transient * 3;
-  const drive = Math.min(1, bass + lo + tr);
 
-  // Horizontal wave bands
+  // Horizontal wave bands driven by bass
   const waveCount = 5 + Math.floor(s.density * 8);
   for (let i = 0; i < waveCount; i++) {
     const yBase = (h / waveCount) * i;
-    const amplitude = drive * 200 * s.audioSensitivity + mids * 60 * s.audioSensitivity;
+    const amplitude = bass * 80 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
     const frequency = 0.01 + s.speed * 0.02;
     const phase = now * (0.3 + s.speed * 0.5) + i * 0.8;
 
@@ -864,27 +800,27 @@ function drawSpatialRhythm(
       ctx.lineTo(x, y);
     }
 
-    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + drive * 1.0);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + bass * 0.3);
     ctx.strokeStyle = getColor(i, s.palette, waveCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1.5 + drive * 6;
+    ctx.lineWidth = 1.5 + bass * 2;
     ctx.stroke();
   }
 
-  // Arc pulses from center
-  const arcCount = 3 + Math.floor(avg * 5 + lo * 5);
+  // Arc pulses from center driven by beat
+  const arcCount = 3 + Math.floor(avg * 5);
   const cx = w / 2;
   const cy = h / 2;
 
   for (let i = 0; i < arcCount; i++) {
-    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive * 1.5 + tr * 2);
+    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + bass * 0.5);
     const startAngle = now * (0.2 + s.speed * 0.3) + i * 1.2;
-    const sweep = Math.PI * (0.3 + mids * 0.4 + tr * 0.3);
+    const sweep = Math.PI * (0.3 + mids * 0.4);
 
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, startAngle + sweep);
-    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25 + tr * 0.5);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25);
     ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1 + mids * 2 + tr * 3;
+    ctx.lineWidth = 1 + mids * 2;
     ctx.stroke();
   }
 
@@ -894,7 +830,7 @@ function drawSpatialRhythm(
     const seed = i * 97.3;
     const baseX = (Math.sin(seed + now * 0.1) * 0.5 + 0.5) * w;
     const baseY = (Math.cos(seed * 1.3 + now * 0.08) * 0.5 + 0.5) * h;
-    const drift = bass * 30 * s.audioSensitivity + tr * 40;
+    const drift = bass * 30 * s.audioSensitivity;
     const x = baseX + Math.sin(now * 0.5 + seed) * drift;
     const y = baseY + Math.cos(now * 0.4 + seed * 1.2) * drift;
     const size = 1 + highs * 3;
