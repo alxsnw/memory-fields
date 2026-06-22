@@ -85,11 +85,11 @@ export default function FieldPage() {
   const { totalCount, registerListen } = useListenerMetric();
 
   // Visual mode transition system
-  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory">("spatial-rhythm");
-  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory">("spatial-rhythm");
+  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow">("spatial-rhythm");
+  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow">("spatial-rhythm");
   const [transitionProgress, setTransitionProgress] = useState(1);
   const [idleTransitionProgress, setIdleTransitionProgress] = useState(0);
-  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory"; to: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" } | null>(null);
+  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow"; to: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" } | null>(null);
   const idleTransitionRef = useRef<{ start: number; duration: number; target: number } | null>(null);
 
   const handleArchive = useCallback((track: Track) => {
@@ -119,7 +119,7 @@ export default function FieldPage() {
     if (!isHost || !room) return;
     
     // Start visual mode transition
-    if (model === "signal-field" || model === "spatial-rhythm" || model === "particle-memory" || model === "noise-memory") {
+    if (model === "signal-field" || model === "spatial-rhythm" || model === "particle-memory" || model === "noise-memory" || model === "latent-flow") {
       const fromMode = activeVisualMode;
       const toMode = model;
       

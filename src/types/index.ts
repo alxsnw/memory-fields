@@ -3,6 +3,7 @@ export type VisualModel =
   | "spatial-rhythm"
   | "particle-memory"
   | "noise-memory"
+  | "latent-flow"
   | "topographic-wave"
   | "orbital-spectrum"
   | "spectral-grid"

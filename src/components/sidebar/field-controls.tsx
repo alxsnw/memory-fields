@@ -12,6 +12,7 @@ const VISUAL_MODELS: { value: VisualModel; label: string; enabled: boolean }[] =
   { value: "signal-field", label: "Signal Field", enabled: true },
   { value: "particle-memory", label: "Particle Memory", enabled: true },
   { value: "noise-memory", label: "Noise Memory", enabled: true },
+  { value: "latent-flow", label: "Latent Flow", enabled: true },
   { value: "topographic-wave", label: "Topographic Wave", enabled: false },
   { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: false },
   { value: "spectral-grid", label: "Spectral Grid", enabled: false },

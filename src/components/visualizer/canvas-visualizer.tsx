@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -33,6 +33,7 @@ const FLOORS = {
 let __connCounter = 0;
 const __srSmooth = { low: 0, prevRaw: 0 };
 const __glitchState = { timer: 0, nextGlitch: 5, glitchTimer: 0, isGlitching: false, tearX: 0 };
+const __lfState = { time: 0 };
 
 interface RendererConfig {
   name: string;
@@ -94,11 +95,24 @@ const noiseMemoryConfig: RendererConfig = {
   boost: 1,
 };
 
+const latentFlowConfig: RendererConfig = {
+  name: "latent-flow",
+  opacity: 1,
+  lineWidth: 1,
+  glow: 1,
+  accumDecay: 0.97,
+  densityScale: 1,
+  audioMapStrength: 1.2,
+  contrast: 1,
+  boost: 1,
+};
+
 const rendererConfigs: Record<string, RendererConfig> = {
   "signal-field": signalFieldConfig,
   "spatial-rhythm": spatialRhythmConfig,
   "particle-memory": particleMemoryConfig,
   "noise-memory": noiseMemoryConfig,
+  "latent-flow": latentFlowConfig,
 };
 
 interface ParticleState {
@@ -296,6 +310,7 @@ export function CanvasVisualizer({
       const spatialRhythmAlpha = alphaFor("spatial-rhythm");
       const particleMemoryAlpha = alphaFor("particle-memory");
       const noiseMemoryAlpha = alphaFor("noise-memory");
+      const latentFlowAlpha = alphaFor("latent-flow");
 
       // Track which modes are actively rendering for crossfade validation
       const renderingModes: string[] = [];
@@ -303,6 +318,7 @@ export function CanvasVisualizer({
       if (spatialRhythmAlpha > 0.01) renderingModes.push("spatial-rhythm");
       if (particleMemoryAlpha > 0.01) renderingModes.push("particle-memory");
       if (noiseMemoryAlpha > 0.01) renderingModes.push("noise-memory");
+      if (latentFlowAlpha > 0.01) renderingModes.push("latent-flow");
       debugRef.current.modes = renderingModes;
       debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
 
@@ -310,7 +326,7 @@ export function CanvasVisualizer({
       debugRef.current.activeMode = activeVisualMode;
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
-      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0);
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0);
       const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       debugRef.current.cfgName = currentCfg.name;
       debugRef.current.globalAlpha = currentCfg.opacity;
@@ -320,7 +336,7 @@ export function CanvasVisualizer({
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
-      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
         const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
@@ -458,6 +474,13 @@ export function CanvasVisualizer({
           drawNoiseMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
           accumCtx.globalAlpha = 1;
         }
+
+        // Latent Flow layers
+        if (latentFlowAlpha > 0.01) {
+          accumCtx.globalAlpha = latentFlowAlpha;
+          drawLatentFlow(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
       }
       {
         const arr = timings.accumDraw;
@@ -498,6 +521,12 @@ export function CanvasVisualizer({
       if (noiseMemoryAlpha > 0.01) {
         ctx.globalAlpha = noiseMemoryAlpha;
         drawNoiseMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
+        ctx.globalAlpha = 1;
+      }
+
+      if (latentFlowAlpha > 0.01) {
+        ctx.globalAlpha = latentFlowAlpha;
+        drawLatentFlow(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         ctx.globalAlpha = 1;
       }
       {
@@ -557,6 +586,8 @@ export function CanvasVisualizer({
           drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, effCoreTrace);
         } else if (activeVisualMode === "noise-memory") {
           drawNoiseMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
+        } else if (activeVisualMode === "latent-flow") {
+          drawLatentFlow(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -1148,6 +1179,101 @@ function drawNoiseMemory(
     ctx.fill();
   }
 
+  ctx.globalAlpha = 1;
+}
+
+/* ── Latent Flow ── */
+function drawLatentFlow(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  __lfState.time += dt;
+
+  const cx = w / 2, cy = h / 2;
+  const fieldR = Math.min(w, h) * 0.38;
+  const density = s.density;
+  const randomness = s.randomness;
+  const coreTrace = 1;
+  const glow = s.glow;
+  const speed = s.speed;
+
+  const nodeCount = Math.floor(8 + density * 24);
+  const centerRays = Math.floor(3 + coreTrace * 8);
+
+  // Draw connecting lines from center to perimeter nodes
+  for (let i = 0; i < nodeCount; i++) {
+    const angle = (i / nodeCount) * Math.PI * 2;
+    const drift = randomness * 0.5;
+    const noiseOff = __lfState.time * (0.05 + speed * 0.05);
+
+    // Node position with noise-based drift
+    const nodeAngle = angle + nmSmooth(i * 3, __lfState.time * 0.1, 0, 1) * drift;
+    const nodeR = fieldR * (0.85 + nmSmooth(i * 7, __lfState.time * 0.08, 0, 1) * 0.15);
+    const nx = cx + Math.cos(nodeAngle) * nodeR;
+    const ny = cy + Math.sin(nodeAngle) * nodeR;
+
+    // Draw curved connection
+    const midAngle = angle + nmSmooth(i * 5, noiseOff, 0, 1) * drift * 0.5;
+    const midR = fieldR * (0.3 + nmSmooth(i * 11, noiseOff * 0.7, 0, 1) * 0.4);
+    const mx = cx + Math.cos(midAngle) * midR;
+    const my = cy + Math.sin(midAngle) * midR;
+
+    const alpha = Math.max(0.06, 0.12 + bass * 0.3 + mids * 0.1);
+    const lineW = 0.5 + bass * 1 + glow * 0.5;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.quadraticCurveTo(mx, my, nx, ny);
+    ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = lineW;
+    ctx.stroke();
+
+    // Draw perimeter node
+    const nodeSize = 1.5 + bass * 1.5 + highs * 1;
+    const nodeGlow = ctx.createRadialGradient(nx, ny, 0, nx, ny, nodeSize * 4);
+    nodeGlow.addColorStop(0, s.palette[i % s.palette.length] + "18");
+    nodeGlow.addColorStop(1, "transparent");
+    ctx.fillStyle = nodeGlow;
+    ctx.globalAlpha = Math.max(0.05, 0.15 + bass * 0.3 + highs * 0.2);
+    ctx.beginPath();
+    ctx.arc(nx, ny, nodeSize * 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = Math.max(0.08, 0.2 + bass * 0.3 + highs * 0.2);
+    ctx.beginPath();
+    ctx.arc(nx, ny, Math.max(0.5, nodeSize), 0, Math.PI * 2);
+    ctx.fillStyle = s.palette[i % s.palette.length];
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw central core
+  const coreSize = Math.min(w, h) * 0.04 * (0.5 + bass * 0.5);
+  const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 6);
+  coreGlow.addColorStop(0, s.palette[0] + "30");
+  coreGlow.addColorStop(0.5, s.palette[1 % s.palette.length] + "15");
+  coreGlow.addColorStop(1, "transparent");
+  ctx.fillStyle = coreGlow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreSize * 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (let i = 2; i >= 0; i--) {
+    const r = coreSize * (1 + i * 0.6 + bass * 0.3);
+    const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    const ca = Math.floor(Math.max(0.2, glow * (0.4 + bass * 0.3 + highs * 0.1)) * 50 * (1 - i * 0.2)).toString(16).padStart(2, "0");
+    gr.addColorStop(0, s.palette[0] + ca);
+    gr.addColorStop(0.6, s.palette[1 % s.palette.length] + ca);
+    gr.addColorStop(1, "transparent");
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
 }
 
