@@ -107,7 +107,13 @@ export function FieldControls({
           </div>
           <FieldSlider label="Core Trace" value={scale(visualParams.coreTraceAmount)} onChange={(v) => onParamChange({ coreTraceAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ coreTraceAmount: unscale(v) })} />
           <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} disabled={visualModel !== "particle-memory"} />
+          <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} disabled={visualModel !== "particle-memory" && visualModel !== "noise-memory"} />
+          {visualModel === "noise-memory" && (
+            <>
+              <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
+              <FieldSlider label="Randomness" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
+            </>
+          )}
         </Section>
 
         {/* Processing - hidden for now */}

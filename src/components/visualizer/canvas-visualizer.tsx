@@ -178,7 +178,7 @@ export function CanvasVisualizer({
   const glitchPhaseRef = useRef(0);
   const glitchEventRef = useRef(0);
   const particleMemRef = useRef<ParticleState[]>([]);
-  const noiseMemRef = useRef({ grid: [] as { vx: number; vy: number }[][], time: 0 });
+  const noiseMemRef = useRef({ grid: [] as { vx: number; vy: number }[][], time: 0, particles: [] as { x: number; y: number; vx: number; vy: number; age: number; seed: number; col: number; row: number }[] });
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
   const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
@@ -1000,7 +1000,7 @@ function nmSmooth(x: number, y: number, t: number, scale: number): number {
 function drawNoiseMemory(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
-  mem: { grid: { vx: number; vy: number }[][]; time: number },
+  mem: { grid: { vx: number; vy: number }[][]; time: number; particles: { x: number; y: number; vx: number; vy: number; age: number; seed: number; col: number; row: number }[] },
 ) {
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
@@ -1008,11 +1008,11 @@ function drawNoiseMemory(
 
   mem.time += dt;
 
-  const cols = 20;
-  const rows = 14;
-  const cellW = w / cols;
-  const cellH = h / rows;
+  const cols = 20, rows = 14;
+  const cellW = w / cols, cellH = h / rows;
   const baseScale = Math.min(w, h) * 0.03;
+  const density = s.density;
+  const randomness = s.randomness;
 
   // Build flow field
   if (mem.grid.length !== rows) {
@@ -1027,52 +1027,120 @@ function drawNoiseMemory(
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const nx = c / cols;
-      const ny = r / rows;
+      const nx = c / cols, ny = r / rows;
       const t = mem.time * 0.15;
-
       const angle = nmSmooth(nx * 3 + ny * 2, ny * 3 - nx * 2, t, 1) * Math.PI * 4;
       const mag = nmSmooth(nx * 2, ny * 2, t * 0.7, 1) * 0.5 + 0.5;
-
       const cell = mem.grid[r][c];
       cell.vx = Math.cos(angle) * mag * baseScale * pressure;
       cell.vy = Math.sin(angle) * mag * baseScale * pressure;
-
-      // Turbulence
       const turbAngle = nmSmooth(nx * 5, ny * 5, t * 1.3, 1) * Math.PI * 2;
       cell.vx += Math.cos(turbAngle) * turbulence * 2;
       cell.vy += Math.sin(turbAngle) * turbulence * 2;
     }
   }
 
-  // Draw flow traces
-  const density = s.density;
-  const traceCount = Math.floor(40 + density * 80);
-  ctx.lineWidth = 0.5 + bass * 0.5;
+  // Manage particle pool
+  const targetCount = Math.floor(60 + density * 120);
+  while (mem.particles.length < targetCount) {
+    const seed = Math.random() * 1000;
+    const c = Math.floor(Math.random() * cols);
+    const r = Math.floor(Math.random() * rows);
+    mem.particles.push({
+      x: c * cellW + cellW * 0.5, y: r * cellH + cellH * 0.5,
+      vx: 0, vy: 0, age: 0, seed, col: c, row: r,
+    });
+  }
+  if (mem.particles.length > targetCount) {
+    mem.particles.length = targetCount;
+  }
 
-  for (let i = 0; i < traceCount; i++) {
-    const seed = i * 137.5;
-    const col = ((nmSmooth(seed, 0, 0, 100) * cols) % cols + cols) % cols;
-    const row = ((nmSmooth(0, seed, 0, 100) * rows) % rows + rows) % rows;
-    const f = mem.grid[Math.floor(row)]?.[Math.floor(col)];
-    if (!f) continue;
+  // Update particles
+  const dtScaleClamped = Math.min(dt * 60, 3);
+  const connectRadius = Math.min(w, h) * (0.04 + density * 0.04);
+  const maxDistSq = connectRadius * connectRadius;
 
-    const x = col * cellW + cellW * 0.5 + f.vx * (0.5 + nmSmooth(seed, mem.time * 0.1, 0, 1) * 0.5);
-    const y = row * cellH + cellH * 0.5 + f.vy * (0.5 + nmSmooth(mem.time * 0.1, seed, 0, 1) * 0.5);
+  for (let i = 0; i < mem.particles.length; i++) {
+    const p = mem.particles[i];
+    p.age += dt;
 
-    // Grain jitter for highs
-    const jx = grain * nmSmooth(seed, mem.time * 0.5, 0, 1) * 2;
-    const jy = grain * nmSmooth(mem.time * 0.5, seed, 0, 1) * 2;
+    const colF = Math.max(0, Math.min(cols - 1, Math.floor(p.x / cellW)));
+    const rowF = Math.max(0, Math.min(rows - 1, Math.floor(p.y / cellH)));
+    const f = mem.grid[rowF][colF];
 
-    const px = x + jx;
-    const py = y + jy;
+    p.vx += f.vx * dtScaleClamped * 0.02;
+    p.vy += f.vy * dtScaleClamped * 0.02;
 
-    const alpha = Math.max(0.04, 0.08 + bass * 0.3 + grain * 0.1);
-    const color = getColor(i, s.palette, traceCount);
+    const drift = randomness * 0.5;
+    p.vx += (nmSmooth(p.seed, mem.time * 0.3, 0, 1) - 0.5) * drift * dtScaleClamped;
+    p.vy += (nmSmooth(mem.time * 0.3, p.seed, 0, 1) - 0.5) * drift * dtScaleClamped;
 
+    let repelX = 0, repelY = 0;
+    const maxJ = Math.min(i + 8, mem.particles.length);
+    for (let j = i + 1; j < maxJ; j++) {
+      const o = mem.particles[j];
+      const dx = p.x - o.x, dy = p.y - o.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < maxDistSq && distSq > 1) {
+        const force = pressure * 0.3 / distSq;
+        repelX += dx * force;
+        repelY += dy * force;
+      }
+    }
+    p.vx += repelX * dtScaleClamped;
+    p.vy += repelY * dtScaleClamped;
+
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+
+    p.x += p.vx * dtScaleClamped;
+    p.y += p.vy * dtScaleClamped;
+
+    if (p.x < -50) p.x = w + 50;
+    if (p.x > w + 50) p.x = -50;
+    if (p.y < -50) p.y = h + 50;
+    if (p.y > h + 50) p.y = -50;
+  }
+
+  // Layer 1: Proximity connections (delicate lines)
+  const cAlpha = 0.02 + density * 0.02 + bass * 0.02;
+  ctx.globalAlpha = cAlpha;
+  ctx.lineWidth = 0.3;
+
+  const step = Math.max(1, Math.floor(mem.particles.length / 120));
+  for (let i = 0; i < mem.particles.length; i += step) {
+    const p1 = mem.particles[i];
+    const maxJ = Math.min(i + 6, mem.particles.length);
+    for (let j = i + 1; j < maxJ; j++) {
+      const p2 = mem.particles[j];
+      const dx = p1.x - p2.x, dy = p1.y - p2.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < maxDistSq) {
+        const a = (1 - Math.sqrt(distSq) / connectRadius) * 0.04;
+        if (a > 0.005) {
+          ctx.strokeStyle = getColor(i, s.palette, mem.particles.length) + Math.floor(a * 255).toString(16).padStart(2, "0");
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Layer 2: Draw particles
+  for (let i = 0; i < mem.particles.length; i++) {
+    const p = mem.particles[i];
+    const gx = grain * (nmSmooth(p.seed, mem.time * 0.5, 0, 1) - 0.5) * 3;
+    const gy = grain * (nmSmooth(mem.time * 0.5, p.seed, 0, 1) - 0.5) * 3;
+    const px = p.x + gx, py = p.y + gy;
+
+    const size = 0.5 + bass * 1 + grain * 0.5;
+    const alpha = Math.max(0.04, 0.06 + bass * 0.2 + mids * 0.1 + grain * 0.05);
     ctx.beginPath();
-    ctx.arc(px, py, 0.5 + bass * 1.5 + grain, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(i, s.palette, mem.particles.length);
     ctx.globalAlpha = alpha;
     ctx.fill();
   }
