@@ -416,7 +416,25 @@ export default function FieldPage() {
 
   useEffect(() => {
     if (!isPlaying) return;
-    const interval = setInterval(() => setCurrentTime((prev) => prev + 0.25), 250);
+    let lastTime = 0;
+    let stalledSec = 0;
+    const interval = setInterval(() => {
+      const el = audioRef.current;
+      if (el && !el.paused) {
+        setCurrentTime(el.currentTime);
+        if (el.currentTime === lastTime && lastTime > 0) {
+          stalledSec += 0.25;
+          if (stalledSec > 3) {
+            console.warn("[audio] detected stall — currentTime not advancing, attempting resume");
+            el.play().catch(() => {});
+            stalledSec = 0;
+          }
+        } else {
+          stalledSec = 0;
+        }
+        lastTime = el.currentTime;
+      }
+    }, 250);
     return () => clearInterval(interval);
   }, [isPlaying]);
 
@@ -455,11 +473,27 @@ export default function FieldPage() {
     audio.addEventListener("error", () => {
       console.error("[audio] error code:", audio.error?.code, audio.error?.message);
     });
+    audio.addEventListener("stalled", () => {
+      console.warn("[audio] stalled — buffering issue");
+    });
+    audio.addEventListener("waiting", () => {
+      console.warn("[audio] waiting — loading data");
+    });
+    audio.addEventListener("suspend", () => {
+      console.warn("[audio] suspend — load suspended");
+    });
     audio.addEventListener("canplay", () => {
       if (sourceRef.current) return;
       setupAudioGraph(audio);
     });
     audio.addEventListener("ended", async () => {
+      // Check if this is a real end or a premature stop
+      const realEnd = audio.duration > 0 && Math.abs(audio.currentTime - audio.duration) < 0.5;
+      if (!realEnd) {
+        console.warn("[audio] premature ended — currentTime:", audio.currentTime, "duration:", audio.duration, "— resuming");
+        audio.play().catch(() => {});
+        return;
+      }
       setIsPlaying(false);
       
       // Start track-to-track visual transition
