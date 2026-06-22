@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave" | "pulse-field";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -147,6 +147,11 @@ const topographicWaveConfig: RendererConfig = {
   opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.98, densityScale: 1, audioMapStrength: 1, contrast: 1, boost: 1,
 };
 
+const pulseFieldConfig: RendererConfig = {
+  name: "pulse-field",
+  opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.96, densityScale: 1, audioMapStrength: 1.5, contrast: 1, boost: 1,
+};
+
 const rendererConfigs: Record<string, RendererConfig> = {
   "signal-field": signalFieldConfig,
   "spatial-rhythm": spatialRhythmConfig,
@@ -158,6 +163,7 @@ const rendererConfigs: Record<string, RendererConfig> = {
   "orbital-spectrum": orbitalSpectrumConfig,
   "spectral-grid": spectralGridConfig,
   "topographic-wave": topographicWaveConfig,
+  "pulse-field": pulseFieldConfig,
 };
 
 interface ParticleState {
@@ -361,6 +367,7 @@ export function CanvasVisualizer({
       const orbitalSpectrumAlpha = alphaFor("orbital-spectrum");
       const spectralGridAlpha = alphaFor("spectral-grid");
       const topographicWaveAlpha = alphaFor("topographic-wave");
+      const pulseFieldAlpha = alphaFor("pulse-field");
 
       // Track which modes are actively rendering for crossfade validation
       const renderingModes: string[] = [];
@@ -374,6 +381,7 @@ export function CanvasVisualizer({
       if (orbitalSpectrumAlpha > 0.01) renderingModes.push("orbital-spectrum");
       if (spectralGridAlpha > 0.01) renderingModes.push("spectral-grid");
       if (topographicWaveAlpha > 0.01) renderingModes.push("topographic-wave");
+      if (pulseFieldAlpha > 0.01) renderingModes.push("pulse-field");
       debugRef.current.modes = renderingModes;
       debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
 
@@ -381,7 +389,7 @@ export function CanvasVisualizer({
       debugRef.current.activeMode = activeVisualMode;
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
-      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0) + (archiveDecoderAlpha > 0.01 ? 1 : 0) + (asciiFieldAlpha > 0.01 ? 1 : 0) + (orbitalSpectrumAlpha > 0.01 ? 1 : 0) + (spectralGridAlpha > 0.01 ? 1 : 0) + (topographicWaveAlpha > 0.01 ? 1 : 0);
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0) + (archiveDecoderAlpha > 0.01 ? 1 : 0) + (asciiFieldAlpha > 0.01 ? 1 : 0) + (orbitalSpectrumAlpha > 0.01 ? 1 : 0) + (spectralGridAlpha > 0.01 ? 1 : 0) + (topographicWaveAlpha > 0.01 ? 1 : 0) + (pulseFieldAlpha > 0.01 ? 1 : 0);
       const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       debugRef.current.cfgName = currentCfg.name;
       debugRef.current.globalAlpha = currentCfg.opacity;
@@ -391,7 +399,7 @@ export function CanvasVisualizer({
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
-      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || archiveDecoderAlpha > 0.01 || asciiFieldAlpha > 0.01 || orbitalSpectrumAlpha > 0.01 || spectralGridAlpha > 0.01 || topographicWaveAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || archiveDecoderAlpha > 0.01 || asciiFieldAlpha > 0.01 || orbitalSpectrumAlpha > 0.01 || spectralGridAlpha > 0.01 || topographicWaveAlpha > 0.01 || pulseFieldAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
         const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
@@ -571,6 +579,13 @@ export function CanvasVisualizer({
           drawTopographicWave(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
           accumCtx.globalAlpha = 1;
         }
+
+        // Pulse Field layers
+        if (pulseFieldAlpha > 0.01) {
+          accumCtx.globalAlpha = pulseFieldAlpha;
+          drawPulseField(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
       }
       {
         const arr = timings.accumDraw;
@@ -649,6 +664,12 @@ export function CanvasVisualizer({
         drawTopographicWave(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         ctx.globalAlpha = 1;
       }
+
+      if (pulseFieldAlpha > 0.01) {
+        ctx.globalAlpha = pulseFieldAlpha;
+        drawPulseField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
       {
         const arr = timings.freshDraw;
         arr.push(performance.now() - tFresh);
@@ -718,6 +739,8 @@ export function CanvasVisualizer({
           drawSpectralGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else if (activeVisualMode === "topographic-wave") {
           drawTopographicWave(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "pulse-field") {
+          drawPulseField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -2003,6 +2026,103 @@ function drawSpectralGrid(
       ctx.fillRect(x - cellW * 0.3, y, cellW * 0.6, height);
     }
   }
+  ctx.globalAlpha = 1;
+}
+
+/* ── Pulse Field ── */
+const __pfState = { shockwave: 0, prevBass: 0, phase: 0 };
+
+function drawPulseField(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  const pf = __pfState;
+  pf.phase += dt;
+  const cx = w / 2, cy = h / 2;
+  const density = s.density;
+  const speed = s.speed;
+  const maxR = Math.min(w, h) * 0.45;
+
+  // Shockwave from kick
+  const kick = Math.max(0, bass - pf.prevBass) * 6;
+  pf.prevBass += (bass - pf.prevBass) * 0.15;
+  if (kick > 0.3) pf.shockwave = Math.min(1, pf.shockwave + kick * 0.5);
+  pf.shockwave *= 0.97; // decay
+
+  // Bass envelope
+  const bEnv = Math.max(0.1, bass * 1.5 + pf.shockwave * 0.5);
+
+  // Concentric rings
+  const ringCount = Math.floor(4 + density * 8);
+  for (let r = 0; r < ringCount; r++) {
+    const ringR = (maxR / ringCount) * (r + 1) * bEnv;
+    const phase = pf.phase * (0.05 + speed * 0.05) + r * 0.5;
+    const wobble = Math.sin(phase) * 3 + Math.sin(phase * 2 + mids * 3) * 2;
+    const alpha = Math.max(0.04, 0.08 + bass * 0.3 - r * 0.01);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR + wobble, 0, Math.PI * 2);
+    ctx.strokeStyle = getColor(r, s.palette, ringCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 0.3 + bEnv * 1.5 - r * 0.05;
+    ctx.stroke();
+  }
+
+  // Shockwave ring (visible expanding pulse)
+  if (pf.shockwave > 0.05) {
+    const swR = maxR * 0.3 + pf.shockwave * maxR * 0.7;
+    const swAlpha = pf.shockwave * 0.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, swR, 0, Math.PI * 2);
+    ctx.strokeStyle = s.palette[0] + Math.floor(swAlpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 1 + pf.shockwave * 3;
+    ctx.stroke();
+  }
+
+  // Vertical energy spikes
+  const spikeCount = Math.floor(10 + density * 20);
+  for (let i = 0; i < spikeCount; i++) {
+    const angle = (i / spikeCount) * Math.PI * 2 + pf.phase * 0.02 * speed;
+    const baseR = maxR * 0.6 * bEnv;
+    const idx = Math.floor((i / spikeCount) * len);
+    const val = data[idx] / 255;
+    const height = val * h * 0.15 * bEnv + highs * h * 0.03;
+    const px = cx + Math.cos(angle) * baseR;
+    const py = cy + Math.sin(angle) * baseR;
+    const alpha = Math.max(0.05, 0.1 + val * 0.5 + highs * 0.2);
+    ctx.fillStyle = getColor(i, s.palette, spikeCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.fillRect(px - 1, py - height, 2, height);
+  }
+
+  // Surrounding particle terrain
+  const particleCount = Math.floor(30 + density * 60);
+  for (let i = 0; i < particleCount; i++) {
+    const seed = i * 73.1;
+    const angle = pf.phase * 0.01 * speed + seed;
+    const dist = maxR * (0.7 + Math.sin(angle + pf.phase * 0.02) * 0.3 * bEnv);
+    const px = cx + Math.cos(angle) * dist;
+    const py = cy + Math.sin(angle) * dist;
+    const size = 0.5 + bass * 1 + highs * 0.5;
+    const alpha = Math.max(0.03, 0.05 + bass * 0.2 + highs * 0.15);
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(i, s.palette, particleCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.fill();
+  }
+
+  // Central core
+  const coreSize = Math.min(w, h) * 0.03 * bEnv;
+  const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 5);
+  gr.addColorStop(0, s.palette[0] + "45");
+  gr.addColorStop(0.5, s.palette[1 % s.palette.length] + "20");
+  gr.addColorStop(1, "transparent");
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreSize * 5, 0, Math.PI * 2);
+  ctx.fill();
   ctx.globalAlpha = 1;
 }
 

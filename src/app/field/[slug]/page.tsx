@@ -85,11 +85,11 @@ export default function FieldPage() {
   const { totalCount, registerListen } = useListenerMetric();
 
   // Visual mode transition system
-  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave">("spatial-rhythm");
-  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave">("spatial-rhythm");
+  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave" | "pulse-field">("spatial-rhythm");
+  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave" | "pulse-field">("spatial-rhythm");
   const [transitionProgress, setTransitionProgress] = useState(1);
   const [idleTransitionProgress, setIdleTransitionProgress] = useState(0);
-  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder"; to: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" } | null>(null);
+  const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave" | "pulse-field"; to: "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave" | "pulse-field" } | null>(null);
   const idleTransitionRef = useRef<{ start: number; duration: number; target: number } | null>(null);
 
   const handleArchive = useCallback((track: Track) => {
@@ -119,7 +119,7 @@ export default function FieldPage() {
     if (!isHost || !room) return;
     
     // Start visual mode transition
-    if (model === "signal-field" || model === "spatial-rhythm" || model === "particle-memory" || model === "noise-memory" || model === "latent-flow" || model === "archive-decoder" || model === "ascii-field" || model === "orbital-spectrum" || model === "spectral-grid" || model === "topographic-wave") {
+    if (model === "signal-field" || model === "spatial-rhythm" || model === "particle-memory" || model === "noise-memory" || model === "latent-flow" || model === "archive-decoder" || model === "ascii-field" || model === "orbital-spectrum" || model === "spectral-grid" || model === "topographic-wave" || model === "pulse-field") {
       const fromMode = activeVisualMode;
       const toMode = model;
       

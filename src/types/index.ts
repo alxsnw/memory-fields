@@ -6,6 +6,7 @@ export type VisualModel =
   | "latent-flow"
   | "archive-decoder"
   | "topographic-wave"
+  | "pulse-field"
   | "orbital-spectrum"
   | "spectral-grid"
   | "ascii-field";

@@ -18,6 +18,7 @@ const VISUAL_MODELS: { value: VisualModel; label: string; enabled: boolean }[] =
   { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: true },
   { value: "spectral-grid", label: "Spectral Grid", enabled: true },
   { value: "topographic-wave", label: "Topographic Wave", enabled: true },
+  { value: "pulse-field", label: "Pulse Field", enabled: true },
 ];
 
 interface FieldControlsProps {
