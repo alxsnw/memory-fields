@@ -182,7 +182,7 @@ export default function LandingPage() {
 
             <div
               className={`
-                relative h-14 flex items-center justify-center gap-2 rounded-capsule overflow-hidden
+                relative min-h-[60px] min-w-[180px] px-8 py-5 flex items-center justify-center gap-2 rounded-capsule overflow-hidden
                 border transition-all duration-300 pointer-events-none
                 ${creating
                   ? "border-white/[0.14] bg-white/[0.06]"
@@ -190,7 +190,7 @@ export default function LandingPage() {
                 }
               `}
             >
-              <span className={`transition-all duration-200 font-mono text-[10px] uppercase tracking-[0.14em] text-frost/86 ${creating ? 'opacity-0' : ''}`}>
+              <span className={`transition-all duration-200 font-mono text-[11px] uppercase tracking-[0.16em] text-frost/86 ${creating ? 'opacity-0' : ''}`}>
                 Create Field
               </span>
               {creating && (
