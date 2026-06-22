@@ -294,11 +294,6 @@ export function CanvasVisualizer({
       const mids = compress(midRaw);
       const highs = highRaw;
 
-      // Inject lowEnergy + transient into first 3 FFT bins
-      const drive = Math.min(1, lowEnergy + transient * 0.5);
-      dataArray[0] = Math.min(255, drive * 255 * 1.8);
-      dataArray[1] = Math.min(255, drive * 255 * 1.4);
-      dataArray[2] = Math.min(255, drive * 255 * 1.0);
       const timings = timingRef.current;
       const tArr = timings.audioAnalysis;
       tArr.push(performance.now() - tAudio);
