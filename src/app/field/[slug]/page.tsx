@@ -461,6 +461,7 @@ export default function FieldPage() {
     const ctx = new AudioContext();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.65;
     const gain = ctx.createGain();
     gain.gain.value = 1;
 
