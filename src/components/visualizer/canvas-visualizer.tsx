@@ -33,7 +33,12 @@ const FLOORS = {
 let __connCounter = 0;
 const __srSmooth = { low: 0, prevRaw: 0 };
 const __glitchState = { timer: 0, nextGlitch: 5, glitchTimer: 0, isGlitching: false, tearX: 0 };
-const __lfState = { time: 0 };
+const __lfState = {
+  time: 0,
+  nodes: [] as { angle: number; radius: number; vAngle: number; vRadius: number; phase: number; targetConnections: number[] }[],
+  connections: [] as { from: number; to: number; age: number }[],
+  reconnectTimer: 0,
+};
 
 interface RendererConfig {
   name: string;
@@ -1191,81 +1196,164 @@ function drawLatentFlow(
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
 
-  __lfState.time += dt;
-
+  const NODE_COUNT = 96;
   const cx = w / 2, cy = h / 2;
-  const fieldR = Math.min(w, h) * 0.38;
+  const fieldR = Math.min(w, h) * 0.36;
   const density = s.density;
   const randomness = s.randomness;
-  const coreTrace = 1;
   const glow = s.glow;
   const speed = s.speed;
 
-  const nodeCount = Math.floor(8 + density * 24);
-  const centerRays = Math.floor(3 + coreTrace * 8);
+  __lfState.time += dt;
+  const lf = __lfState;
+  const dtS = Math.min(dt * 60, 3);
 
-  // Draw connecting lines from center to perimeter nodes
-  for (let i = 0; i < nodeCount; i++) {
-    const angle = (i / nodeCount) * Math.PI * 2;
-    const drift = randomness * 0.5;
-    const noiseOff = __lfState.time * (0.05 + speed * 0.05);
-
-    // Node position with noise-based drift
-    const nodeAngle = angle + nmSmooth(i * 3, __lfState.time * 0.1, 0, 1) * drift;
-    const nodeR = fieldR * (0.85 + nmSmooth(i * 7, __lfState.time * 0.08, 0, 1) * 0.15);
-    const nx = cx + Math.cos(nodeAngle) * nodeR;
-    const ny = cy + Math.sin(nodeAngle) * nodeR;
-
-    // Draw curved connection
-    const midAngle = angle + nmSmooth(i * 5, noiseOff, 0, 1) * drift * 0.5;
-    const midR = fieldR * (0.3 + nmSmooth(i * 11, noiseOff * 0.7, 0, 1) * 0.4);
-    const mx = cx + Math.cos(midAngle) * midR;
-    const my = cy + Math.sin(midAngle) * midR;
-
-    const alpha = Math.max(0.06, 0.12 + bass * 0.3 + mids * 0.1);
-    const lineW = 0.5 + bass * 1 + glow * 0.5;
-
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.quadraticCurveTo(mx, my, nx, ny);
-    ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = lineW;
-    ctx.stroke();
-
-    // Draw perimeter node
-    const nodeSize = 1.5 + bass * 1.5 + highs * 1;
-    const nodeGlow = ctx.createRadialGradient(nx, ny, 0, nx, ny, nodeSize * 4);
-    nodeGlow.addColorStop(0, s.palette[i % s.palette.length] + "18");
-    nodeGlow.addColorStop(1, "transparent");
-    ctx.fillStyle = nodeGlow;
-    ctx.globalAlpha = Math.max(0.05, 0.15 + bass * 0.3 + highs * 0.2);
-    ctx.beginPath();
-    ctx.arc(nx, ny, nodeSize * 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = Math.max(0.08, 0.2 + bass * 0.3 + highs * 0.2);
-    ctx.beginPath();
-    ctx.arc(nx, ny, Math.max(0.5, nodeSize), 0, Math.PI * 2);
-    ctx.fillStyle = s.palette[i % s.palette.length];
-    ctx.fill();
-    ctx.globalAlpha = 1;
+  // Init 96 nodes
+  if (lf.nodes.length !== NODE_COUNT) {
+    lf.nodes = Array.from({ length: NODE_COUNT }, (_, i) => ({
+      angle: (i / NODE_COUNT) * Math.PI * 2,
+      radius: fieldR * (0.75 + Math.random() * 0.25),
+      vAngle: 0, vRadius: 0, phase: Math.random() * Math.PI * 2,
+      targetConnections: [] as number[],
+    }));
+    lf.connections = [];
+    lf.reconnectTimer = 0;
   }
 
-  // Draw central core
+  // Reorganize connections periodically
+  lf.reconnectTimer += dt;
+  if (lf.reconnectTimer > 0.5 + mids * 2 || lf.connections.length === 0) {
+    lf.reconnectTimer = 0;
+    // Each node picks 1-3 targets
+    for (let i = 0; i < NODE_COUNT; i++) {
+      const count = 1 + Math.floor(nmSmooth(i * 13, lf.time * 0.02, 0, 1) * 3);
+      lf.nodes[i].targetConnections = [];
+      for (let c = 0; c < count; c++) {
+        const target = Math.floor(nmSmooth(i * 17 + c * 97, lf.time * 0.03, 0, 1) * NODE_COUNT) % NODE_COUNT;
+        if (target !== i && !lf.nodes[i].targetConnections.includes(target)) {
+          lf.nodes[i].targetConnections.push(target);
+        }
+      }
+    }
+    // Collect unique connections
+    const connSet = new Set<string>();
+    for (let i = 0; i < NODE_COUNT; i++) {
+      for (const t of lf.nodes[i].targetConnections) {
+        const key = Math.min(i, t) + "-" + Math.max(i, t);
+        if (!connSet.has(key)) {
+          connSet.add(key);
+          lf.connections.push({ from: i, to: t, age: 0 });
+        }
+      }
+    }
+    // Prune stale connections (keep most recent)
+    if (lf.connections.length > NODE_COUNT * 2) {
+      lf.connections = lf.connections.slice(-NODE_COUNT * 2);
+    }
+  }
+
+  // Update nodes
+  for (let i = 0; i < NODE_COUNT; i++) {
+    const n = lf.nodes[i];
+    const na = nmSmooth(i * 3, lf.time * 0.05 * speed, 0, 1) - 0.5;
+    const nr = nmSmooth(i * 7, lf.time * 0.04 * speed, 0, 1) - 0.5;
+    n.vAngle += na * randomness * 0.015 * dtS;
+    n.vRadius += nr * randomness * 0.015 * dtS;
+    n.vRadius += bass * 0.3 * dtS; // bass pushes outward
+    n.vRadius -= (n.radius - fieldR * 0.8) * 0.008 * dtS;
+    n.vAngle *= 0.97;
+    n.vRadius *= 0.97;
+    n.angle += n.vAngle * dtS;
+    n.radius += n.vRadius * dtS;
+    n.radius = Math.max(fieldR * 0.3, Math.min(fieldR * 1.3, n.radius));
+  }
+
+  // Age connections
+  for (const c of lf.connections) c.age += dt;
+
+  // Layer 1: Background particles (tiny floating dots)
+  const bgCount = Math.floor(30 + density * 40);
+  for (let i = 0; i < bgCount; i++) {
+    const seed = i * 73.1;
+    const bx = (nmSmooth(seed, lf.time * 0.02, 0, 1) * 0.9 + 0.05) * w;
+    const by = (nmSmooth(lf.time * 0.02, seed, 0, 1) * 0.9 + 0.05) * h;
+    const ba = 0.03 + nmSmooth(seed * 2, lf.time * 0.04, 0, 1) * 0.04;
+    ctx.beginPath();
+    ctx.arc(bx, by, 0.3 + highs * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = s.palette[i % s.palette.length] + Math.floor(ba * 255).toString(16).padStart(2, "0");
+    ctx.fill();
+  }
+
+  // Layer 2: Connection network
+  const tension = 1 + bass * 1.2;
+  for (const c of lf.connections) {
+    const n1 = lf.nodes[c.from];
+    const n2 = lf.nodes[c.to];
+    const x1 = cx + Math.cos(n1.angle) * n1.radius;
+    const y1 = cy + Math.sin(n1.angle) * n1.radius;
+    const x2 = cx + Math.cos(n2.angle) * n2.radius;
+    const y2 = cy + Math.sin(n2.angle) * n2.radius;
+
+    // Bezier control points with noise displacement
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    const noiseOff = nmSmooth(c.from * 19 + c.to * 31, lf.time * 0.06 * speed, 0, 1) - 0.5;
+    const cp1x = midX + Math.cos(n1.angle + noiseOff) * fieldR * 0.15 * tension;
+    const cp1y = midY + Math.sin(n1.angle + noiseOff) * fieldR * 0.15 * tension;
+    const cp2x = midX + Math.cos(n2.angle + noiseOff * 0.7) * fieldR * 0.15 * tension;
+    const cp2y = midY + Math.sin(n2.angle + noiseOff * 0.7) * fieldR * 0.15 * tension;
+
+    const alpha = Math.max(0.03, 0.06 + bass * 0.3 + mids * 0.1) * Math.min(1, c.age * 2);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+    ctx.strokeStyle = getColor(c.from, s.palette, NODE_COUNT) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 0.3 + bass * 1 + glow * 0.3;
+    ctx.stroke();
+  }
+
+  // Layer 3: Outer nodes
+  for (let i = 0; i < NODE_COUNT; i++) {
+    const n = lf.nodes[i];
+    const nx = cx + Math.cos(n.angle) * n.radius;
+    const ny = cy + Math.sin(n.angle) * n.radius;
+    const ns = 0.5 + bass * 1.5 + highs * 1;
+    const na = Math.max(0.04, 0.1 + bass * 0.3 + highs * 0.2);
+
+    // Glow
+    const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, ns * 4);
+    ng.addColorStop(0, s.palette[i % s.palette.length] + "18");
+    ng.addColorStop(1, "transparent");
+    ctx.fillStyle = ng;
+    ctx.globalAlpha = na * 0.6;
+    ctx.beginPath();
+    ctx.arc(nx, ny, ns * 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dot
+    ctx.globalAlpha = na;
+    ctx.beginPath();
+    ctx.arc(nx, ny, Math.max(0.3, ns * 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = getColor(i, s.palette, NODE_COUNT);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Layer 4: Central core glow
   const coreSize = Math.min(w, h) * 0.04 * (0.5 + bass * 0.5);
-  const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 6);
-  coreGlow.addColorStop(0, s.palette[0] + "30");
-  coreGlow.addColorStop(0.5, s.palette[1 % s.palette.length] + "15");
+  const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 8);
+  coreGlow.addColorStop(0, s.palette[0] + "35");
+  coreGlow.addColorStop(0.5, s.palette[1 % s.palette.length] + "18");
   coreGlow.addColorStop(1, "transparent");
   ctx.fillStyle = coreGlow;
   ctx.beginPath();
-  ctx.arc(cx, cy, coreSize * 6, 0, Math.PI * 2);
+  ctx.arc(cx, cy, coreSize * 8, 0, Math.PI * 2);
   ctx.fill();
 
   for (let i = 2; i >= 0; i--) {
     const r = coreSize * (1 + i * 0.6 + bass * 0.3);
     const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    const ca = Math.floor(Math.max(0.2, glow * (0.4 + bass * 0.3 + highs * 0.1)) * 50 * (1 - i * 0.2)).toString(16).padStart(2, "0");
+    const ca = Math.floor(Math.max(0.12, glow * (0.3 + bass * 0.4)) * 50 * (1 - i * 0.2)).toString(16).padStart(2, "0");
     gr.addColorStop(0, s.palette[0] + ca);
     gr.addColorStop(0.6, s.palette[1 % s.palette.length] + ca);
     gr.addColorStop(1, "transparent");
