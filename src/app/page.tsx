@@ -214,7 +214,9 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <ActiveFields />
+      <div className="relative z-10">
+        <ActiveFields />
+      </div>
 
       <Dialog open={nameDialog} onOpenChange={setNameDialog}>
         <DialogContent className="sm:max-w-sm">

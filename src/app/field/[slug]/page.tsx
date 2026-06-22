@@ -770,8 +770,12 @@ export default function FieldPage() {
   const handleMultiUpload = useCallback((file: File) => {
     batchRef.current.total++;
     const isMulti = batchRef.current.total > 1;
+    if (isMulti && batchRef.current.done === 0) {
+      console.log("[upload-batch] start — count:", batchRef.current.total);
+    }
     uploadQueueRef.current = uploadQueueRef.current.then(async () => {
       batchRef.current.done++;
+      console.log("[upload-batch] uploaded — index:", batchRef.current.done, "of", batchRef.current.total);
       setUploadProgress(Math.round((batchRef.current.done / batchRef.current.total) * 100));
       await handleUpload(file);
       // After the last file in a multi-upload batch: set first track
@@ -786,6 +790,8 @@ export default function FieldPage() {
           .order("uploaded_at", { ascending: false })
           .limit(1);
         if (tracks && tracks.length > 0 && room) {
+          console.log("[upload-batch] complete — firstTrackId:", tracks[0].id, "setting current track + autoplay");
+          autoPlayRef.current = true;
           syncState({ current_track_id: tracks[0].id });
         }
         batchRef.current.total = 0;
