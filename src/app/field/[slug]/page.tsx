@@ -576,7 +576,7 @@ export default function FieldPage() {
         if (room && next) {
           autoPlayRef.current = true;
           console.log("[autoplay] upserting room_state — roomId:", room.id, "nextTrackId:", next.id);
-          const { error: upsertErr } = await supabase.from("room_state").upsert(
+          const { error: upsertErr } = await getClient().from("room_state").upsert(
             { room_id: room.id, current_track_id: next.id, is_playing: true, seek_position: 0 },
             { onConflict: "room_id" },
           );
