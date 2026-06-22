@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -80,10 +80,23 @@ const particleMemoryConfig: RendererConfig = {
   boost: 1,
 };
 
+const noiseMemoryConfig: RendererConfig = {
+  name: "noise-memory",
+  opacity: 1,
+  lineWidth: 1,
+  glow: 1,
+  accumDecay: 0.97,
+  densityScale: 1,
+  audioMapStrength: 1.5,
+  contrast: 1,
+  boost: 1,
+};
+
 const rendererConfigs: Record<string, RendererConfig> = {
   "signal-field": signalFieldConfig,
   "spatial-rhythm": spatialRhythmConfig,
   "particle-memory": particleMemoryConfig,
+  "noise-memory": noiseMemoryConfig,
 };
 
 interface ParticleState {
@@ -165,6 +178,7 @@ export function CanvasVisualizer({
   const glitchPhaseRef = useRef(0);
   const glitchEventRef = useRef(0);
   const particleMemRef = useRef<ParticleState[]>([]);
+  const noiseMemRef = useRef({ grid: [] as { vx: number; vy: number }[][], time: 0 });
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
   const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
@@ -278,12 +292,14 @@ export function CanvasVisualizer({
       const signalFieldAlpha = alphaFor("signal-field");
       const spatialRhythmAlpha = alphaFor("spatial-rhythm");
       const particleMemoryAlpha = alphaFor("particle-memory");
+      const noiseMemoryAlpha = alphaFor("noise-memory");
 
       // Track which modes are actively rendering for crossfade validation
       const renderingModes: string[] = [];
       if (signalFieldAlpha > 0.01) renderingModes.push("signal-field");
       if (spatialRhythmAlpha > 0.01) renderingModes.push("spatial-rhythm");
       if (particleMemoryAlpha > 0.01) renderingModes.push("particle-memory");
+      if (noiseMemoryAlpha > 0.01) renderingModes.push("noise-memory");
       debugRef.current.modes = renderingModes;
       debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
 
@@ -291,7 +307,7 @@ export function CanvasVisualizer({
       debugRef.current.activeMode = activeVisualMode;
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
-      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0);
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0);
       const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       debugRef.current.cfgName = currentCfg.name;
       debugRef.current.globalAlpha = currentCfg.opacity;
@@ -301,7 +317,7 @@ export function CanvasVisualizer({
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
-      if (particleMemoryAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
         const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
@@ -432,6 +448,13 @@ export function CanvasVisualizer({
           drawParticleMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, false, effCoreTrace);
           accumCtx.globalAlpha = 1;
         }
+
+        // Noise Memory layers
+        if (noiseMemoryAlpha > 0.01) {
+          accumCtx.globalAlpha = noiseMemoryAlpha;
+          drawNoiseMemory(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
+          accumCtx.globalAlpha = 1;
+        }
       }
       {
         const arr = timings.accumDraw;
@@ -466,6 +489,12 @@ export function CanvasVisualizer({
       if (particleMemoryAlpha > 0.01) {
         ctx.globalAlpha = particleMemoryAlpha;
         drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, effCoreTrace);
+        ctx.globalAlpha = 1;
+      }
+
+      if (noiseMemoryAlpha > 0.01) {
+        ctx.globalAlpha = noiseMemoryAlpha;
+        drawNoiseMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
         ctx.globalAlpha = 1;
       }
       {
@@ -523,6 +552,8 @@ export function CanvasVisualizer({
           drawSignalField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else if (activeVisualMode === "particle-memory") {
           drawParticleMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, particleMemRef.current, true, effCoreTrace);
+        } else if (activeVisualMode === "noise-memory") {
+          drawNoiseMemory(ctx, w, h, dataArray, bufferLength, avg, now, dt, state, noiseMemRef.current);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -940,6 +971,110 @@ function drawParticleMemory(
         }
       }
     }
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+/* ── Noise Memory (experimental) ── */
+// Simple hash-based noise for flow field
+function nmHash(x: number, y: number, t: number): number {
+  let h = x * 374761393 + y * 668265263 + t * 1274126177;
+  h = (h ^ (h >> 13)) * 1274126177;
+  return (h ^ (h >> 16)) & 0x7fffffff;
+}
+
+function nmSmooth(x: number, y: number, t: number, scale: number): number {
+  const sx = x / scale, sy = y / scale;
+  const ix = Math.floor(sx), iy = Math.floor(sy);
+  const fx = sx - ix, fy = sy - iy;
+  const a = nmHash(ix, iy, Math.floor(t)) / 0x7fffffff;
+  const b = nmHash(ix + 1, iy, Math.floor(t)) / 0x7fffffff;
+  const c = nmHash(ix, iy + 1, Math.floor(t)) / 0x7fffffff;
+  const d = nmHash(ix + 1, iy + 1, Math.floor(t)) / 0x7fffffff;
+  const mx = fx * fx * (3 - 2 * fx);
+  const my = fy * fy * (3 - 2 * fy);
+  return a + (b - a) * mx + (c - a) * my + (a - b - c + d) * mx * my;
+}
+
+function drawNoiseMemory(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+  mem: { grid: { vx: number; vy: number }[][]; time: number },
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  mem.time += dt;
+
+  const cols = 20;
+  const rows = 14;
+  const cellW = w / cols;
+  const cellH = h / rows;
+  const baseScale = Math.min(w, h) * 0.03;
+
+  // Build flow field
+  if (mem.grid.length !== rows) {
+    mem.grid = Array.from({ length: rows }, () =>
+      Array.from({ length: cols }, () => ({ vx: 0, vy: 0 }))
+    );
+  }
+
+  const pressure = 1 + bass * 2;
+  const turbulence = 1 + mids * 1.5;
+  const grain = highs * 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const nx = c / cols;
+      const ny = r / rows;
+      const t = mem.time * 0.15;
+
+      const angle = nmSmooth(nx * 3 + ny * 2, ny * 3 - nx * 2, t, 1) * Math.PI * 4;
+      const mag = nmSmooth(nx * 2, ny * 2, t * 0.7, 1) * 0.5 + 0.5;
+
+      const cell = mem.grid[r][c];
+      cell.vx = Math.cos(angle) * mag * baseScale * pressure;
+      cell.vy = Math.sin(angle) * mag * baseScale * pressure;
+
+      // Turbulence
+      const turbAngle = nmSmooth(nx * 5, ny * 5, t * 1.3, 1) * Math.PI * 2;
+      cell.vx += Math.cos(turbAngle) * turbulence * 2;
+      cell.vy += Math.sin(turbAngle) * turbulence * 2;
+    }
+  }
+
+  // Draw flow traces
+  const density = s.density;
+  const traceCount = Math.floor(40 + density * 80);
+  ctx.lineWidth = 0.5 + bass * 0.5;
+
+  for (let i = 0; i < traceCount; i++) {
+    const seed = i * 137.5;
+    const col = ((nmSmooth(seed, 0, 0, 100) * cols) % cols + cols) % cols;
+    const row = ((nmSmooth(0, seed, 0, 100) * rows) % rows + rows) % rows;
+    const f = mem.grid[Math.floor(row)]?.[Math.floor(col)];
+    if (!f) continue;
+
+    const x = col * cellW + cellW * 0.5 + f.vx * (0.5 + nmSmooth(seed, mem.time * 0.1, 0, 1) * 0.5);
+    const y = row * cellH + cellH * 0.5 + f.vy * (0.5 + nmSmooth(mem.time * 0.1, seed, 0, 1) * 0.5);
+
+    // Grain jitter for highs
+    const jx = grain * nmSmooth(seed, mem.time * 0.5, 0, 1) * 2;
+    const jy = grain * nmSmooth(mem.time * 0.5, seed, 0, 1) * 2;
+
+    const px = x + jx;
+    const py = y + jy;
+
+    const alpha = Math.max(0.04, 0.08 + bass * 0.3 + grain * 0.1);
+    const color = getColor(i, s.palette, traceCount);
+
+    ctx.beginPath();
+    ctx.arc(px, py, 0.5 + bass * 1.5 + grain, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.fill();
   }
 
   ctx.globalAlpha = 1;

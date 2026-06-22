@@ -2,6 +2,7 @@ export type VisualModel =
   | "signal-field"
   | "spatial-rhythm"
   | "particle-memory"
+  | "noise-memory"
   | "topographic-wave"
   | "orbital-spectrum"
   | "spectral-grid"
