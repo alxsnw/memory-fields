@@ -1558,6 +1558,84 @@ function drawLatentFlow(
   ctx.globalAlpha = 1;
 }
 
+/* ── Archive Decoder ── */
+const __adChars = [".", ",", ":", ";", "+", "*", "#", "@"];
+const __adState = { noise: new Float32Array(0), phase: 0 };
+
+function drawArchiveDecoder(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+  __adState.phase += dt;
+  const density = s.density;
+  const speed = s.speed;
+  const glyphSize = Math.max(4, 8 - density * 4);
+  const cols = Math.ceil(w / glyphSize);
+  const rows = Math.ceil(h / glyphSize);
+  const total = cols * rows;
+
+  // Init noise buffer
+  if (__adState.noise.length !== total) {
+    __adState.noise = new Float32Array(total);
+    for (let i = 0; i < total; i++) __adState.noise[i] = Math.random();
+  }
+
+  // Audio envelope for reconstruction
+  const env = __adState.phase * 0;
+  const lfEnv = Math.min(1, (bass * 2 + mids) * 0.5);
+  const corruption = Math.min(1, highs * 2);
+
+  ctx.font = `${glyphSize}px monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const nx = c / cols, ny = r / rows;
+
+      // Signal value: noise + audio-driven density wave
+      const wave = Math.sin(nx * 20 + __adState.phase * 0.3 * speed) * bass * 2
+                 + Math.cos(ny * 15 + __adState.phase * 0.2 * speed) * mids;
+      const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + lfEnv * 0.3 + wave * 0.4));
+      __adState.noise[i] += (signal - __adState.noise[i]) * 0.02;
+
+      // Glyph selection
+      const bright = Math.floor(signal * __adChars.length);
+      const char = __adChars[Math.min(bright, __adChars.length - 1)];
+
+      // Corruption flicker
+      const flicker = corruption > 0.3 && Math.random() < corruption * 0.1 ? Math.random() : 1;
+
+      const px = c * glyphSize + glyphSize / 2;
+      const py = r * glyphSize + glyphSize / 2;
+      const alpha = Math.max(0.05, signal * 0.6 + lfEnv * 0.4) * flicker;
+      const colorIdx = Math.floor(signal * s.palette.length) % s.palette.length;
+
+      ctx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      ctx.fillText(char, px, py);
+    }
+  }
+
+  // Scanlines overlay
+  ctx.fillStyle = `rgba(0,0,0,0.03)`;
+  for (let r = 0; r < rows; r += 2) {
+    ctx.fillRect(0, r * glyphSize, w, 1);
+  }
+
+  // Corruption bands
+  if (corruption > 0.2 && Math.random() < corruption * 0.05) {
+    const bandY = Math.random() * h;
+    const bandH = 2 + Math.random() * 6;
+    ctx.fillStyle = `rgba(255,255,255,${corruption * 0.1})`;
+    ctx.fillRect(0, bandY, w, bandH);
+  }
+}
+
 /* ── Glitch / VHS post-processing ── */
 function drawGlitch(
   ctx: CanvasRenderingContext2D, w: number, h: number, avg: number, now: number, glitch: number, vhs: number,
