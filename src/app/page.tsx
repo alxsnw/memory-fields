@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DepthWaveRings } from "@/components/hero/depth-wave-rings";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
+import { DailyListenerCount } from "@/components/metrics/daily-listener-count";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,10 @@ export default function LandingPage() {
           Collaborative audio visualization rooms.
           Upload a track, share the link, and experience the sound together.
         </p>
+
+        <div className="mb-10">
+          <DailyListenerCount variant="hero" />
+        </div>
 
         <div className="flex flex-col items-center gap-4">
           <div className="relative w-auto cursor-pointer select-none"
