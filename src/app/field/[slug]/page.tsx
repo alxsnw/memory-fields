@@ -752,7 +752,11 @@ export default function FieldPage() {
       }).select().single();
 
       if (trackError) throw trackError;
-      if (tracks.length === 0 && track) syncState({ current_track_id: track.id });
+      // Only set first track and trigger autoplay if this is NOT part of a multi-upload batch
+      if (tracks.length === 0 && track && batchRef.current.total <= 1) {
+        syncState({ current_track_id: track.id });
+      }
+      // For multi-upload batches: after batch completes, handleMultiUpload will set the first track
     } catch (err) {
       console.error("Upload error:", err);
       alert("Upload failed: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -762,10 +766,34 @@ export default function FieldPage() {
 
   // Queue for sequential multi-file upload
   const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const handleMultiUpload = useCallback(async (file: File) => {
-    uploadQueueRef.current = uploadQueueRef.current.then(() => handleUpload(file));
-    await uploadQueueRef.current;
-  }, [room, latentState, tracks, displayName, syncState]);
+  const batchRef = useRef({ total: 0, done: 0 });
+  const handleMultiUpload = useCallback((file: File) => {
+    batchRef.current.total++;
+    const isMulti = batchRef.current.total > 1;
+    uploadQueueRef.current = uploadQueueRef.current.then(async () => {
+      batchRef.current.done++;
+      setUploadProgress(Math.round((batchRef.current.done / batchRef.current.total) * 100));
+      await handleUpload(file);
+      // After the last file in a multi-upload batch: set first track
+      if (isMulti && batchRef.current.done === batchRef.current.total) {
+        // Small delay for realtime to populate tracks state
+        await new Promise(r => setTimeout(r, 600));
+        const supabase = getClient();
+        const { data: tracks } = await supabase
+          .from("tracks")
+          .select("id")
+          .eq("room_id", room!.id)
+          .order("uploaded_at", { ascending: false })
+          .limit(1);
+        if (tracks && tracks.length > 0 && room) {
+          syncState({ current_track_id: tracks[0].id });
+        }
+        batchRef.current.total = 0;
+        batchRef.current.done = 0;
+      }
+    });
+    return uploadQueueRef.current;
+  }, [room, latentState, displayName, syncState]);
 
   const handleExport = (format: "png" | "jpeg") => {
     const canvas = document.querySelector("canvas");
