@@ -507,32 +507,52 @@ export default function FieldPage() {
     });
 
     // If autoPlayRef is set, start playback when audio is ready
+    const autoPlayTriggered = autoPlayRef.current;
+    console.log("[autoplay] effect run — newTrackId:", currentTrack?.id, "autoPlayRef:", autoPlayRef.current, "readyState:", audio.readyState);
     if (autoPlayRef.current) {
       autoPlayRef.current = false;
+      console.log("[autoplay] autoPlay triggered — starting playback");
       const tryPlay = () => {
+        console.log("[autoplay] tryPlay — AudioContext state:", audioCtxRef.current?.state);
         if (audioCtxRef.current?.state === "suspended") {
           audioCtxRef.current.resume().catch(() => {});
         }
         audio.play().then(() => {
+          console.log("[autoplay] audio.play() resolved");
           setIsPlaying(true);
           syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: 0 });
         }).catch((err) => {
-          console.warn("[audio] auto-play failed:", err);
+          console.warn("[autoplay] audio.play() rejected:", err);
           setIsPlaying(false);
         });
       };
       if (audio.readyState >= 3) {
+        console.log("[autoplay] readyState >= HAVE_FUTURE_DATA, playing immediately");
         tryPlay();
       } else {
+        console.log("[autoplay] readyState < HAVE_FUTURE_DATA, waiting for canplay");
         audio.addEventListener("canplay", tryPlay, { once: true });
+        // Fallback: if canplay doesn't fire within 2s, force play anyway
+        const fallbackTimer = setTimeout(() => {
+          if (!audio.paused) return;
+          console.log("[autoplay] fallback — canplay not fired, forcing play");
+          audio.play().then(() => {
+            console.log("[autoplay] fallback play resolved");
+            setIsPlaying(true);
+          }).catch((err) => {
+            console.warn("[autoplay] fallback play rejected:", err);
+          });
+        }, 2000);
+        audio.addEventListener("canplay", () => clearTimeout(fallbackTimer), { once: true });
       }
     }
 
     audio.addEventListener("ended", async () => {
       // Check if this is a real end or a premature stop
       const realEnd = audio.duration > 0 && Math.abs(audio.currentTime - audio.duration) < 0.5;
+      console.log("[autoplay] ended fired — currentTime:", audio.currentTime, "duration:", audio.duration, "realEnd:", realEnd, "trackId:", currentTrack?.id);
       if (!realEnd) {
-        console.warn("[audio] premature ended — currentTime:", audio.currentTime, "duration:", audio.duration, "— resuming");
+        console.warn("[autoplay] premature ended — resuming");
         audio.play().catch(() => {});
         return;
       }
@@ -548,17 +568,24 @@ export default function FieldPage() {
       // Auto-advance to next track (with loop)
       const sorted = [...tracks].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
       const idx = sorted.findIndex(t => t.id === roomState?.current_track_id);
+      console.log("[autoplay] playlist — length:", sorted.length, "currentIdx:", idx, "currentId:", roomState?.current_track_id);
       if (isHost && sorted.length > 0) {
-        const nextIdx = idx < sorted.length - 1 ? idx + 1 : 0; // Loop back to first track
+        const nextIdx = idx < sorted.length - 1 ? idx + 1 : 0;
         const next = sorted[nextIdx];
-        if (room) {
+        console.log("[autoplay] next track — idx:", nextIdx, "id:", next?.id, "url exists:", !!next?.file_url);
+        if (room && next) {
           autoPlayRef.current = true;
-          await supabase.from("room_state").upsert(
+          console.log("[autoplay] upserting room_state — roomId:", room.id, "nextTrackId:", next.id);
+          const { error: upsertErr } = await supabase.from("room_state").upsert(
             { room_id: room.id, current_track_id: next.id, is_playing: true, seek_position: 0 },
             { onConflict: "room_id" },
           );
+          console.log("[autoplay] upsert complete — error:", upsertErr?.message || "none");
+        } else {
+          console.warn("[autoplay] cannot advance — room:", !!room, "next:", !!next);
         }
       } else {
+        console.log("[autoplay] no next track — isHost:", isHost, "tracks:", sorted.length);
         syncState({ is_playing: false, seek_position: 0 });
       }
     });
