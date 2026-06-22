@@ -963,6 +963,18 @@ export default function FieldPage() {
               <Button size="sm" variant="ghost" className="text-[9px] font-mono h-6 px-2" onClick={handleBenchReport}>
                 Report
               </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__srVariant?.mode === 0 && "text-cyan/70")} onClick={() => { (window as any).__srVariant = (window as any).__srVariant || { mode: 0 }; (window as any).__srVariant.mode = 0; }}>
+                SRv0
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__srVariant?.mode === 1 && "text-cyan/70")} onClick={() => { (window as any).__srVariant = (window as any).__srVariant || { mode: 0 }; (window as any).__srVariant.mode = 1; }}>
+                SRv1
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__srVariant?.mode === 2 && "text-cyan/70")} onClick={() => { (window as any).__srVariant = (window as any).__srVariant || { mode: 0 }; (window as any).__srVariant.mode = 2; }}>
+                SRv2
+              </Button>
+              <Button size="sm" variant="ghost" className={cn("text-[9px] font-mono h-6 px-2", window.__srVariant?.mode === 3 && "text-cyan/70")} onClick={() => { (window as any).__srVariant = (window as any).__srVariant || { mode: 0 }; (window as any).__srVariant.mode = 3; }}>
+                SRv3
+              </Button>
             </div>
             {tuneMode && (
               <div className="border-t border-white/[0.06] pt-3">

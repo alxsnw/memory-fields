@@ -33,6 +33,8 @@ const FLOORS = {
 let __connCounter = 0;
 const __srSmooth = { low: 0, prevRaw: 0 };
 const __glitchState = { timer: 0, nextGlitch: 5, glitchTimer: 0, isGlitching: false, tearX: 0 };
+const __srVariant = { mode: 0 };
+if (typeof window !== "undefined") (window as any).__srVariant = __srVariant;
 const __lfState = {
   time: 0,
   nodes: [] as { angle: number; radius: number; vAngle: number; vRadius: number; phase: number; targetConnections: number[] }[],
@@ -853,14 +855,140 @@ function drawSpatialRhythm(
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
 
-  // Isolated low-end processing for Spatial Rhythm only
+  const vm = __srVariant.mode;
+
+  // Variant A (1): Original baseline — pure frequency bins, no envelope
+  if (vm === 1) {
+    const waveCount1 = 5 + Math.floor(s.density * 8);
+    for (let i = 0; i < waveCount1; i++) {
+      const yBase = (h / waveCount1) * i;
+      const amp1 = bass * 80 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+      const freq1 = 0.01 + s.speed * 0.02;
+      const ph1 = now * (0.3 + s.speed * 0.5) + i * 0.8;
+      ctx.beginPath(); ctx.moveTo(0, yBase);
+      for (let x = 0; x <= w; x += 4) {
+        const wv = Math.sin(x * freq1 + ph1) * amp1;
+        const sec = Math.sin(x * freq1 * 2.3 + ph1 * 1.5) * amp1 * 0.3;
+        ctx.lineTo(x, yBase + wv + sec);
+      }
+      const a1 = Math.max(FLOORS.lineAlpha, 0.15 + bass * 0.3);
+      ctx.strokeStyle = getColor(i, s.palette, waveCount1) + Math.floor(a1 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1.5 + bass * 2;
+      ctx.stroke();
+    }
+    const arcCount1 = 3 + Math.floor(avg * 5);
+    const cx1 = w / 2, cy1 = h / 2;
+    for (let i = 0; i < arcCount1; i++) {
+      const r1 = Math.min(w, h) * (0.15 + i * 0.12) * (1 + bass * 0.5);
+      const sa1 = now * (0.2 + s.speed * 0.3) + i * 1.2;
+      const sw1 = Math.PI * (0.3 + mids * 0.4);
+      ctx.beginPath(); ctx.arc(cx1, cy1, r1, sa1, sa1 + sw1);
+      const a1 = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25);
+      ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(a1 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1 + mids * 2;
+      ctx.stroke();
+    }
+    const pc1 = Math.floor(20 + s.density * 40);
+    for (let i = 0; i < pc1; i++) {
+      const sd = i * 97.3;
+      const bx = (Math.sin(sd + now * 0.1) * 0.5 + 0.5) * w;
+      const by = (Math.cos(sd * 1.3 + now * 0.08) * 0.5 + 0.5) * h;
+      const dr = bass * 30 * s.audioSensitivity;
+      const px = bx + Math.sin(now * 0.5 + sd) * dr;
+      const py = by + Math.cos(now * 0.4 + sd * 1.2) * dr;
+      ctx.beginPath(); ctx.arc(px, py, 1 + highs * 3, 0, Math.PI * 2);
+      ctx.fillStyle = getColor(i, s.palette, pc1);
+      ctx.globalAlpha = Math.max(FLOORS.particleAlpha, 0.15 + highs * 0.4);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Variant B (2): Low-end envelope v1 — moderate __lowEnergy drive
+  if (vm === 2) {
+    const lo2 = Math.min(1, bass * 1.5);
+    const sr2 = __srSmooth;
+    sr2.low += (lo2 - sr2.low) * (lo2 > sr2.low ? 0.35 : 0.06);
+    const drive2 = Math.min(1, bass + sr2.low * 0.5);
+    const wc2 = 5 + Math.floor(s.density * 8);
+    for (let i = 0; i < wc2; i++) {
+      const yb = (h / wc2) * i;
+      const amp2 = drive2 * 120 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+      const freq2 = 0.01 + s.speed * 0.02;
+      const ph2 = now * (0.3 + s.speed * 0.5) + i * 0.8;
+      ctx.beginPath(); ctx.moveTo(0, yb);
+      for (let x = 0; x <= w; x += 4) {
+        const wv = Math.sin(x * freq2 + ph2) * amp2;
+        ctx.lineTo(x, yb + wv);
+      }
+      const a2 = Math.max(FLOORS.lineAlpha, 0.15 + drive2 * 0.4);
+      ctx.strokeStyle = getColor(i, s.palette, wc2) + Math.floor(a2 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1.5 + drive2 * 3;
+      ctx.stroke();
+    }
+    const ac2 = 3 + Math.floor(avg * 5);
+    const cx2 = w / 2, cy2 = h / 2;
+    for (let i = 0; i < ac2; i++) {
+      const r2 = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive2 * 0.8);
+      const sa2 = now * (0.2 + s.speed * 0.3) + i * 1.2;
+      const sw2 = Math.PI * (0.3 + mids * 0.4);
+      ctx.beginPath(); ctx.arc(cx2, cy2, r2, sa2, sa2 + sw2);
+      const a2 = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25 + drive2 * 0.2);
+      ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(a2 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1 + mids * 2 + drive2 * 1;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Variant C (3): Aggressive drive — strong multipliers
+  if (vm === 3) {
+    const lo3 = Math.min(1, bass * 3);
+    const sr3 = __srSmooth;
+    sr3.low += (lo3 - sr3.low) * (lo3 > sr3.low ? 0.4 : 0.08);
+    const kick3 = Math.max(0, lo3 - sr3.prevRaw) * 4;
+    sr3.prevRaw = lo3;
+    const drive3 = Math.min(1, bass + sr3.low * 1.5 + kick3 * 0.8);
+    const wc3 = 5 + Math.floor(s.density * 8);
+    for (let i = 0; i < wc3; i++) {
+      const yb = (h / wc3) * i;
+      const amp3 = drive3 * 200 * s.audioSensitivity + mids * 60 * s.audioSensitivity;
+      const freq3 = 0.01 + s.speed * 0.02;
+      const ph3 = now * (0.3 + s.speed * 0.5) + i * 0.8;
+      ctx.beginPath(); ctx.moveTo(0, yb);
+      for (let x = 0; x <= w; x += 4) {
+        ctx.lineTo(x, yb + Math.sin(x * freq3 + ph3) * amp3);
+      }
+      const a3 = Math.max(FLOORS.lineAlpha, 0.15 + drive3 * 1.0);
+      ctx.strokeStyle = getColor(i, s.palette, wc3) + Math.floor(a3 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1.5 + drive3 * 6;
+      ctx.stroke();
+    }
+    const ac3 = 3 + Math.floor(avg * 5 + sr3.low * 3);
+    const cx3 = w / 2, cy3 = h / 2;
+    for (let i = 0; i < ac3; i++) {
+      const r3 = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive3 * 1.5 + kick3 * 1.5);
+      const sa3 = now * (0.2 + s.speed * 0.3) + i * 1.2 + kick3;
+      const sw3 = Math.PI * (0.3 + mids * 0.4 + drive3 * 0.2);
+      ctx.beginPath(); ctx.arc(cx3, cy3, r3, sa3, sa3 + sw3);
+      const a3 = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25 + kick3 * 0.5);
+      ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(a3 * 255).toString(16).padStart(2, "0");
+      ctx.lineWidth = 1 + mids * 2 + kick3 * 3;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Variant 0 (Current): v3 with breathing + time reduction
   const lowRaw = Math.min(1, bass * 2.5);
   const sr = __srSmooth;
   sr.low += (lowRaw - sr.low) * (lowRaw > sr.low ? 0.4 : 0.08);
   const kickPulse = Math.max(0, lowRaw - sr.prevRaw) * 3;
   sr.prevRaw = lowRaw;
 
-  // Combine audio drive with time-based drift (audio dominates when playing)
   const audioWeight = Math.min(1, avg * 4);
   const timePhase = now * (0.08 + s.speed * 0.04);
   const breathe = 1 + (sr.low * 0.6 + kickPulse * 0.4) * (0.5 + audioWeight * 0.5);
