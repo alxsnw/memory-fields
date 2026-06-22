@@ -1560,7 +1560,7 @@ function drawLatentFlow(
 
 /* ── Archive Decoder ── */
 const __adChars = [".", ",", ":", ";", "+", "*", "#", "@"];
-const __adState = { noise: new Float32Array(0), phase: 0 };
+const __adState = { noise: new Float32Array(0), phase: 0, bassEnv: 0, highEnv: 0, prevBass: 0 };
 
 function drawArchiveDecoder(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
@@ -1573,23 +1573,38 @@ function drawArchiveDecoder(
   __adState.phase += dt;
   const density = s.density;
   const speed = s.speed;
-  const glyphSize = Math.max(4, 8 - density * 4);
-  const cols = Math.ceil(w / glyphSize);
-  const rows = Math.ceil(h / glyphSize);
+  const baseSize = Math.max(4, 10 - density * 6);
+  const cols = Math.ceil(w / baseSize);
+  const rows = Math.ceil(h / baseSize);
   const total = cols * rows;
 
-  // Init noise buffer
   if (__adState.noise.length !== total) {
     __adState.noise = new Float32Array(total);
     for (let i = 0; i < total; i++) __adState.noise[i] = Math.random();
   }
 
-  // Audio envelope for reconstruction
-  const env = __adState.phase * 0;
-  const lfEnv = Math.min(1, (bass * 2 + mids) * 0.5);
-  const corruption = Math.min(1, highs * 2);
+  // Audio envelopes: fast attack, slow release
+  const st = __adState;
+  const attack = 0.45, release = 0.035;
+  st.bassEnv += (bass - st.bassEnv) * (bass > st.bassEnv ? attack : release);
+  st.highEnv += (highs - st.highEnv) * (highs > st.highEnv ? attack : 0.08);
 
-  ctx.font = `${glyphSize}px monospace`;
+  // Transient/kick detection
+  const kick = Math.max(0, bass - st.prevBass) * 4;
+  st.prevBass += (bass - st.prevBass) * 0.15;
+
+  const bEnv = Math.max(0.1, st.bassEnv);
+  const hEnv = st.highEnv;
+
+  // Grid distortion on kick/bass
+  const distortion = kick * 8;       // pixel displacement
+  const expansion = bEnv * 10;       // glyph size surge
+  const corruptProb = Math.min(0.3, hEnv * 0.5 + kick * 0.3);
+
+  // Per-glyph corruption sparkle
+  const sparkleProb = hEnv * 0.02;
+
+  ctx.font = `${baseSize}px monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -1598,40 +1613,53 @@ function drawArchiveDecoder(
       const i = r * cols + c;
       const nx = c / cols, ny = r / rows;
 
-      // Signal value: noise + audio-driven density wave
-      const wave = Math.sin(nx * 20 + __adState.phase * 0.3 * speed) * bass * 2
-                 + Math.cos(ny * 15 + __adState.phase * 0.2 * speed) * mids;
-      const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + lfEnv * 0.3 + wave * 0.4));
-      __adState.noise[i] += (signal - __adState.noise[i]) * 0.02;
+      // Waves: amplitude scales with bass envelope
+      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6
+                 + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 3;
+      const signal = Math.max(0, Math.min(0.99, __adState.noise[i] * 0.3 + bEnv * 0.5 + wave * 0.4));
+      __adState.noise[i] += (signal - __adState.noise[i]) * 0.03;
 
-      // Glyph selection
+      // Glyph choice
       const bright = Math.floor(signal * __adChars.length);
       const char = __adChars[Math.min(bright, __adChars.length - 1)];
 
-      // Corruption flicker
-      const flicker = corruption > 0.3 && Math.random() < corruption * 0.1 ? Math.random() : 1;
+      // Corruption / sparkle
+      const corrupted = corruptProb > 0 && Math.random() < corruptProb;
+      const sparkle = sparkleProb > 0 && Math.random() < sparkleProb;
 
-      const px = c * glyphSize + glyphSize / 2;
-      const py = r * glyphSize + glyphSize / 2;
-      const alpha = Math.max(0.05, signal * 0.6 + lfEnv * 0.4) * flicker;
-      const colorIdx = Math.floor(signal * s.palette.length) % s.palette.length;
+      // Grid coordinate distortion on bass/kick
+      const distortX = distortion * Math.sin(ny * 10 + kick * 2);
+      const distortY = distortion * Math.cos(nx * 8 + kick * 1.5);
+      const gs = baseSize + expansion * signal;
+      const px = c * gs + gs / 2 + distortX;
+      const py = r * gs + gs / 2 + distortY;
 
-      ctx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      let alpha = Math.max(0.06, signal * 0.5 + bEnv * 0.6);
+      if (corrupted) alpha = Math.min(1, alpha + kick * 0.5);
+      if (sparkle) alpha = Math.min(1, alpha + 0.5);
+
+      let colorIdx = Math.floor(signal * s.palette.length) % s.palette.length;
+      if (corrupted) colorIdx = Math.floor(Math.random() * s.palette.length);
+      if (sparkle) {
+        ctx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`;
+      } else {
+        ctx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      }
       ctx.fillText(char, px, py);
     }
   }
 
-  // Scanlines overlay
-  ctx.fillStyle = `rgba(0,0,0,0.03)`;
+  // Scanlines with bass-driven intensity
+  ctx.fillStyle = `rgba(0,0,0,${0.02 + bEnv * 0.03})`;
   for (let r = 0; r < rows; r += 2) {
-    ctx.fillRect(0, r * glyphSize, w, 1);
+    ctx.fillRect(0, r * baseSize, w, 1);
   }
 
-  // Corruption bands
-  if (corruption > 0.2 && Math.random() < corruption * 0.05) {
+  // Corruption bands driven by highs + kick
+  if (corruptProb > 0.05 && Math.random() < corruptProb * 0.3) {
     const bandY = Math.random() * h;
-    const bandH = 2 + Math.random() * 6;
-    ctx.fillStyle = `rgba(255,255,255,${corruption * 0.1})`;
+    const bandH = 2 + Math.random() * 8 + kick * 4;
+    ctx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.15})`;
     ctx.fillRect(0, bandY, w, bandH);
   }
 }
