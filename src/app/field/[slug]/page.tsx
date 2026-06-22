@@ -420,20 +420,38 @@ export default function FieldPage() {
     let stalledSec = 0;
     const interval = setInterval(() => {
       const el = audioRef.current;
-      if (el && !el.paused) {
-        setCurrentTime(el.currentTime);
-        if (el.currentTime === lastTime && lastTime > 0) {
-          stalledSec += 0.25;
-          if (stalledSec > 3) {
-            console.warn("[audio] detected stall — currentTime not advancing, attempting resume");
-            el.play().catch(() => {});
-            stalledSec = 0;
-          }
-        } else {
+      if (!el) return;
+
+      // Resume AudioContext if suspended
+      const ctx = audioCtxRef.current;
+      if (ctx?.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
+
+      if (el.paused) {
+        // Audio is paused but app thinks it's playing — try to resume
+        stalledSec += 0.25;
+        if (stalledSec > 1) {
+          console.warn("[audio] unexpectedly paused, attempting resume");
+          el.play().catch(() => {});
+          if (ctx?.state === "suspended") ctx.resume().catch(() => {});
           stalledSec = 0;
         }
-        lastTime = el.currentTime;
+        return;
       }
+
+      setCurrentTime(el.currentTime);
+      if (el.currentTime === lastTime && lastTime > 0) {
+        stalledSec += 0.25;
+        if (stalledSec > 3) {
+          console.warn("[audio] stall detected, attempting resume");
+          el.play().catch(() => {});
+          stalledSec = 0;
+        }
+      } else {
+        stalledSec = 0;
+      }
+      lastTime = el.currentTime;
     }, 250);
     return () => clearInterval(interval);
   }, [isPlaying]);
