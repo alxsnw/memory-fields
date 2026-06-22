@@ -30,6 +30,7 @@ const FLOORS = {
 };
 
 let __connCounter = 0;
+const __srSmooth = { low: 0, prevRaw: 0 };
 
 interface RendererConfig {
   name: string;
@@ -782,49 +783,61 @@ function drawSpatialRhythm(
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
 
-  // Horizontal wave bands driven by bass
+  // Isolated low-end processing for Spatial Rhythm only
+  const lowRaw = Math.min(1, bass * 2.5);
+  const sr = __srSmooth;
+  sr.low += (lowRaw - sr.low) * (lowRaw > sr.low ? 0.4 : 0.08);
+  const kickPulse = Math.max(0, lowRaw - sr.prevRaw) * 3;
+  sr.prevRaw = lowRaw;
+
+  // Combine audio drive with time-based drift (audio dominates when playing)
+  const audioWeight = Math.min(1, avg * 4);
+  const timePhase = now * (0.08 + s.speed * 0.04);
+  const breathe = 1 + (sr.low * 0.6 + kickPulse * 0.4) * (0.5 + audioWeight * 0.5);
+
+  // Horizontal wave bands
   const waveCount = 5 + Math.floor(s.density * 8);
   for (let i = 0; i < waveCount; i++) {
     const yBase = (h / waveCount) * i;
-    const amplitude = bass * 80 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+    const amp = (bass * 80 + sr.low * 60 + kickPulse * 40) * s.audioSensitivity * breathe;
     const frequency = 0.01 + s.speed * 0.02;
-    const phase = now * (0.3 + s.speed * 0.5) + i * 0.8;
+    const phase = timePhase + i * 0.8 + sr.low * 0.5;
 
     ctx.beginPath();
     ctx.moveTo(0, yBase);
 
     for (let x = 0; x <= w; x += 4) {
-      const wave = Math.sin(x * frequency + phase) * amplitude;
-      const secondary = Math.sin(x * frequency * 2.3 + phase * 1.5) * amplitude * 0.3;
+      const wave = Math.sin(x * frequency + phase) * amp;
+      const secondary = Math.sin(x * frequency * 2.3 + phase * 1.5) * amp * 0.3;
       const y = yBase + wave + secondary;
       ctx.lineTo(x, y);
     }
 
-    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + bass * 0.3);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + sr.low * 0.6);
     ctx.strokeStyle = getColor(i, s.palette, waveCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1.5 + bass * 2;
+    ctx.lineWidth = (1.5 + sr.low * 4) * breathe;
     ctx.stroke();
   }
 
-  // Arc pulses from center driven by beat
-  const arcCount = 3 + Math.floor(avg * 5);
+  // Arc pulses from center — driven by audio, less by time
+  const arcCount = 3 + Math.floor(avg * 5 + sr.low * 3);
   const cx = w / 2;
   const cy = h / 2;
 
   for (let i = 0; i < arcCount; i++) {
-    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + bass * 0.5);
-    const startAngle = now * (0.2 + s.speed * 0.3) + i * 1.2;
-    const sweep = Math.PI * (0.3 + mids * 0.4);
+    const radius = Math.min(w, h) * (0.15 + i * 0.12) * breathe * (1 + kickPulse * 0.5);
+    const startAngle = timePhase * 0.3 + i * 1.2 + kickPulse;
+    const sweep = Math.PI * (0.3 + mids * 0.4 + sr.low * 0.3);
 
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, startAngle + sweep);
-    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25 + sr.low * 0.3);
     ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1 + mids * 2;
+    ctx.lineWidth = 1 + mids * 2 + sr.low * 2;
     ctx.stroke();
   }
 
-  // Floating spatial particles
+  // Floating spatial particles (driven by highs, not low-end)
   const particleCount = Math.floor(20 + s.density * 40);
   for (let i = 0; i < particleCount; i++) {
     const seed = i * 97.3;
