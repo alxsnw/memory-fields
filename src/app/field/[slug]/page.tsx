@@ -730,16 +730,22 @@ export default function FieldPage() {
     if (!room) return;
     if (latentState === "dormant") handleWakeField();
     setUploading(true);
-    setUploadProgress(0);
-    try {
-      const supabase = getClient();
-      const ext = file.name.split(".").pop();
-      const filePath = `${room.id}/${uuid()}.${ext}`;
+      setUploadProgress(0);
+      setUploading(true);
+      try {
+        const supabase = getClient();
+        const ext = file.name.split(".").pop();
+        const filePath = `${room.id}/${uuid()}.${ext}`;
 
-      const progressInterval = setInterval(() => setUploadProgress((prev) => Math.min(prev + 15, 85)), 500);
-      const { error: uploadError } = await supabase.storage.from("audio").upload(filePath, file, { upsert: true });
-      clearInterval(progressInterval);
-      if (uploadError) throw uploadError;
+        // Gentle indeterminate progress (avoids getting stuck at some %)
+        const progressInterval = setInterval(() => setUploadProgress((prev) => {
+          if (prev < 20) return prev + 3;
+          if (prev < 50) return prev + 1;
+          return prev + 0.5;
+        }), 1000);
+        const { error: uploadError } = await supabase.storage.from("audio").upload(filePath, file, { upsert: true });
+        clearInterval(progressInterval);
+        if (uploadError) throw uploadError;
       setUploadProgress(100);
 
       const { data: urlData } = supabase.storage.from("audio").getPublicUrl(filePath);
