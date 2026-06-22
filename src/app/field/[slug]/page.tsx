@@ -85,8 +85,8 @@ export default function FieldPage() {
   const { totalCount, registerListen } = useListenerMetric();
 
   // Visual mode transition system
-  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
-  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
+  const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("spatial-rhythm");
+  const [prevVisualMode, setPrevVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("spatial-rhythm");
   const [transitionProgress, setTransitionProgress] = useState(1);
   const [idleTransitionProgress, setIdleTransitionProgress] = useState(0);
   const transitionRef = useRef<{ start: number; duration: number; from: "signal-field" | "spatial-rhythm" | "particle-memory"; to: "signal-field" | "spatial-rhythm" | "particle-memory" } | null>(null);
@@ -223,6 +223,7 @@ export default function FieldPage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+  const autoPlayRef = useRef(false);
 
   const roomSeed = useRef(getRoomSeed(slug));
   const [journey, setJourney] = useState(() => createJourney(roomSeed.current, false));
@@ -504,6 +505,29 @@ export default function FieldPage() {
       if (sourceRef.current) return;
       setupAudioGraph(audio);
     });
+
+    // If autoPlayRef is set, start playback when audio is ready
+    if (autoPlayRef.current) {
+      autoPlayRef.current = false;
+      const tryPlay = () => {
+        if (audioCtxRef.current?.state === "suspended") {
+          audioCtxRef.current.resume().catch(() => {});
+        }
+        audio.play().then(() => {
+          setIsPlaying(true);
+          syncState({ is_playing: true, started_at: new Date().toISOString(), seek_position: 0 });
+        }).catch((err) => {
+          console.warn("[audio] auto-play failed:", err);
+          setIsPlaying(false);
+        });
+      };
+      if (audio.readyState >= 3) {
+        tryPlay();
+      } else {
+        audio.addEventListener("canplay", tryPlay, { once: true });
+      }
+    }
+
     audio.addEventListener("ended", async () => {
       // Check if this is a real end or a premature stop
       const realEnd = audio.duration > 0 && Math.abs(audio.currentTime - audio.duration) < 0.5;
@@ -528,6 +552,7 @@ export default function FieldPage() {
         const nextIdx = idx < sorted.length - 1 ? idx + 1 : 0; // Loop back to first track
         const next = sorted[nextIdx];
         if (room) {
+          autoPlayRef.current = true;
           await supabase.from("room_state").upsert(
             { room_id: room.id, current_track_id: next.id, is_playing: true, seek_position: 0 },
             { onConflict: "room_id" },
