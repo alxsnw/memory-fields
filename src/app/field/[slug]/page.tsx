@@ -82,7 +82,7 @@ export default function FieldPage() {
   const [compActive, setCompActive] = useState(false);
   const [archivedTrackIds, setArchivedTrackIds] = useState<Set<string>>(new Set());
 
-  const { todayCount, registerListen } = useListenerMetric();
+  const { totalCount, registerListen } = useListenerMetric();
 
   // Visual mode transition system
   const [activeVisualMode, setActiveVisualMode] = useState<"signal-field" | "spatial-rhythm" | "particle-memory">("signal-field");
@@ -685,7 +685,7 @@ export default function FieldPage() {
       const filePath = `${room.id}/${uuid()}.${ext}`;
 
       const progressInterval = setInterval(() => setUploadProgress((prev) => Math.min(prev + 15, 85)), 500);
-      const { error: uploadError } = await supabase.storage.from("audio").upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from("audio").upload(filePath, file, { upsert: true });
       clearInterval(progressInterval);
       if (uploadError) throw uploadError;
       setUploadProgress(100);
@@ -707,6 +707,13 @@ export default function FieldPage() {
     }
     finally { setUploading(false); }
   };
+
+  // Queue for sequential multi-file upload
+  const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const handleMultiUpload = useCallback(async (file: File) => {
+    uploadQueueRef.current = uploadQueueRef.current.then(() => handleUpload(file));
+    await uploadQueueRef.current;
+  }, [room, latentState, tracks, displayName, syncState]);
 
   const handleExport = (format: "png" | "jpeg") => {
     const canvas = document.querySelector("canvas");
@@ -801,7 +808,7 @@ export default function FieldPage() {
           <div className="shrink-0">
             <Brand />
 
-            <UploadCapsule onUpload={handleUpload} uploading={uploading} progress={uploadProgress} />
+            <UploadCapsule onUpload={handleMultiUpload} uploading={uploading} progress={uploadProgress} multi />
             
             {/* Mini-manifest */}
             <p className="mt-3 mb-8 text-[10.5px] leading-[1.4] text-frost/42 max-w-[280px]">
@@ -815,7 +822,7 @@ export default function FieldPage() {
             </div>
           )}
           <div className="mt-auto pt-2 pb-1">
-            <DailyListenerCount count={todayCount} />
+            <DailyListenerCount count={totalCount} />
           </div>
         </aside>
       </GlitchContainer>

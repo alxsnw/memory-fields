@@ -8,7 +8,6 @@ function getVisitorId(): string {
   if (!id) {
     id = crypto.randomUUID();
     localStorage.setItem("mf_visitor_id", id);
-    console.log("[metrics] created visitorId:", id);
   }
   return id;
 }
@@ -21,50 +20,34 @@ function todayStr(): string {
 function alreadyListenedToday(): boolean {
   if (typeof window === "undefined") return false;
   const key = `mf_listened_${todayStr()}`;
-  const val = localStorage.getItem(key);
-  console.log("[metrics] daily flag", key, "=", val);
-  return val === "1";
+  return localStorage.getItem(key) === "1";
 }
 
 function markListenedToday(): void {
   if (typeof window === "undefined") return;
   const key = `mf_listened_${todayStr()}`;
   localStorage.setItem(key, "1");
-  console.log("[metrics] set daily flag:", key);
 }
 
 export function useListenerMetric() {
-  const [todayCount, setTodayCount] = useState<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const registering = useRef(false);
 
-  // Fetch count on mount (GET)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const visitorId = getVisitorId();
-    console.log("[metrics] mount — visitorId:", visitorId, "alreadyListened:", alreadyListenedToday());
     fetch("/api/metrics/listen")
       .then((r) => r.json())
-      .then((data) => {
-        console.log("[metrics] GET response:", data);
-        setTodayCount(data.count ?? 0);
-      })
-      .catch((e) => {
-        console.error("[metrics] GET failed:", e);
-      });
+      .then((data) => setTotalCount(data.total ?? 0))
+      .catch(() => {});
   }, []);
 
   const registerListen = useCallback(async () => {
-    if (registering.current || alreadyListenedToday()) {
-      console.log("[metrics] skip register — alreadyListened:", alreadyListenedToday(), "registering:", registering.current);
-      return;
-    }
+    if (registering.current || alreadyListenedToday()) return;
     registering.current = true;
 
     try {
       const visitorId = getVisitorId();
       if (!visitorId) return;
-
-      console.log("[metrics] POST — visitorId:", visitorId);
 
       const res = await fetch("/api/metrics/listen", {
         method: "POST",
@@ -74,12 +57,9 @@ export function useListenerMetric() {
 
       const data = await res.json();
 
-      console.log("[metrics] POST response:", { status: res.status, data });
-
       if (res.ok) {
-        setTodayCount(data.count ?? 0);
+        setTotalCount(data.total ?? 0);
         markListenedToday();
-        console.log("[metrics] count updated:", data.count);
       } else {
         console.error("[metrics] POST error:", data.error);
       }
@@ -90,5 +70,5 @@ export function useListenerMetric() {
     }
   }, []);
 
-  return { todayCount, registerListen };
+  return { totalCount, registerListen };
 }

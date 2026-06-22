@@ -123,16 +123,13 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-col items-center gap-4">
-          <Button
-            size="lg"
-            className="relative !bg-[#07080A] border border-white/[0.04] rounded-full !h-auto px-5 py-2.5 !text-white !font-normal tracking-normal transition-[border-color,background,color,padding] duration-[400ms] ease-out hover:bg-white/[0.04] hover:!text-white hover:!px-6 hover:!py-3 active:bg-white/[0.055] active:border-white/[0.22] active:!translate-y-[0.5px]"
+          <div className="relative w-auto cursor-pointer select-none"
             onMouseEnter={() => setButtonHover(true)}
             onMouseLeave={() => setButtonHover(false)}
             onClick={async () => {
               const saved = getSavedName();
               if (saved) {
                 setName(saved);
-                // Need to use the saved value directly since setState is async
                 setCreating(true);
                 clickTimeRef.current = Date.now();
                 try {
@@ -163,17 +160,48 @@ export default function LandingPage() {
               }
             }}
           >
-            <span className={`transition-all duration-200 ${creating ? 'opacity-0 translate-y-1' : ''}`}>
-              Create Field
-            </span>
-            {creating && (
-              <span className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '0s' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '0.5s' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '1s' }} />
+            {/* Laser sweep beam */}
+            <div className="absolute inset-0 overflow-hidden rounded-capsule pointer-events-none">
+              <div
+                className="absolute top-0 bottom-0 w-[35%] skew-x-[-18deg] blur-[8px] pointer-events-none"
+                style={{
+                  background:
+                    "linear-gradient(90deg, transparent 0%, rgba(120,223,255,0) 10%, rgba(120,223,255,0.18) 35%, rgba(244,246,250,0.35) 50%, rgba(167,139,250,0.20) 65%, transparent 100%)",
+                  animationName: creating ? "none" : "laser-sweep",
+                  animationDuration: buttonHover ? "4s" : "8s",
+                  animationTimingFunction: "ease-in-out",
+                  animationIterationCount: "infinite",
+                  opacity: buttonHover && !creating ? 1 : 0.6,
+                  transition: "opacity 300ms ease",
+                }}
+              />
+            </div>
+
+            {/* Inner top highlight */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent rounded-capsule pointer-events-none" />
+
+            <div
+              className={`
+                relative h-14 flex items-center justify-center gap-2 rounded-capsule overflow-hidden
+                border transition-all duration-300 pointer-events-none
+                ${creating
+                  ? "border-white/[0.14] bg-white/[0.06]"
+                  : "border-white/[0.10] bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.985]"
+                }
+              `}
+            >
+              <span className={`transition-all duration-200 font-mono text-[10px] uppercase tracking-[0.14em] text-frost/86 ${creating ? 'opacity-0' : ''}`}>
+                Create Field
               </span>
-            )}
-          </Button>
+              {creating && (
+                <span className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '0s' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '0.5s' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-frost/50" style={{ animation: 'dot-pulse 3s ease-in-out infinite', animationDelay: '1s' }} />
+                </span>
+              )}
+            </div>
+          </div>
           <p className="mt-2.5 text-[10px] font-mono uppercase tracking-[0.1em] text-subtle">
             {creating ? 'initializing field...' : 'private · persistent · shared'}
           </p>

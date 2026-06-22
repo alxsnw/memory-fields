@@ -11,9 +11,10 @@ interface UploadCapsuleProps {
   onUpload: (file: File) => void
   uploading: boolean
   progress: number
+  multi?: boolean
 }
 
-export default function UploadCapsule({ onUpload, uploading, progress }: UploadCapsuleProps) {
+export default function UploadCapsule({ onUpload, uploading, progress, multi }: UploadCapsuleProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
@@ -32,8 +33,12 @@ export default function UploadCapsule({ onUpload, uploading, progress }: UploadC
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
+    const files = e.target.files
+    if (files) {
+      for (let i = 0; i < files.length; i++) {
+        handleFile(files[i])
+      }
+    }
     if (inputRef.current) inputRef.current.value = ""
   }
 
@@ -115,7 +120,7 @@ export default function UploadCapsule({ onUpload, uploading, progress }: UploadC
             letterSpacing: uploading ? "0.06em" : "0.14em",
           }}
         >
-          {uploading ? `Uploading ${progress}%` : "Upload Audio"}
+          {uploading ? `Uploading ${progress}%` : (multi ? "Upload Audio" : "Upload Audio")}
         </span>
       </div>
 
@@ -123,6 +128,7 @@ export default function UploadCapsule({ onUpload, uploading, progress }: UploadC
         ref={inputRef}
         type="file"
         accept="audio/*"
+        multiple
         className="hidden"
         onChange={handleInputChange}
       />
