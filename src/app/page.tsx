@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { DepthWaveRings } from "@/components/hero/depth-wave-rings";
 import IdleAuroraField from "@/components/visualizer/idle-aurora-field";
 import { DailyListenerCount } from "@/components/metrics/daily-listener-count";
+import { ActiveFields } from "@/components/hero/active-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,8 @@ export default function LandingPage() {
           </p>
         </div>
       </div>
+
+      <ActiveFields />
 
       <Dialog open={nameDialog} onOpenChange={setNameDialog}>
         <DialogContent className="sm:max-w-sm">
