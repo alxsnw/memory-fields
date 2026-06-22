@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { InterpolatedState } from "@/lib/visual-journey";
 
-type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder";
+type VisualMode = "signal-field" | "spatial-rhythm" | "particle-memory" | "noise-memory" | "latent-flow" | "archive-decoder" | "ascii-field" | "orbital-spectrum" | "spectral-grid" | "topographic-wave";
 
 interface CanvasVisualizerProps {
   state: InterpolatedState;
@@ -127,6 +127,26 @@ const archiveDecoderConfig: RendererConfig = {
   boost: 1,
 };
 
+const asciiFieldConfig: RendererConfig = {
+  name: "ascii-field",
+  opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.97, densityScale: 1, audioMapStrength: 1, contrast: 1, boost: 1,
+};
+
+const orbitalSpectrumConfig: RendererConfig = {
+  name: "orbital-spectrum",
+  opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.97, densityScale: 1, audioMapStrength: 1, contrast: 1, boost: 1,
+};
+
+const spectralGridConfig: RendererConfig = {
+  name: "spectral-grid",
+  opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.98, densityScale: 1, audioMapStrength: 1, contrast: 1, boost: 1,
+};
+
+const topographicWaveConfig: RendererConfig = {
+  name: "topographic-wave",
+  opacity: 1, lineWidth: 1, glow: 1, accumDecay: 0.98, densityScale: 1, audioMapStrength: 1, contrast: 1, boost: 1,
+};
+
 const rendererConfigs: Record<string, RendererConfig> = {
   "signal-field": signalFieldConfig,
   "spatial-rhythm": spatialRhythmConfig,
@@ -134,6 +154,10 @@ const rendererConfigs: Record<string, RendererConfig> = {
   "noise-memory": noiseMemoryConfig,
   "latent-flow": latentFlowConfig,
   "archive-decoder": archiveDecoderConfig,
+  "ascii-field": asciiFieldConfig,
+  "orbital-spectrum": orbitalSpectrumConfig,
+  "spectral-grid": spectralGridConfig,
+  "topographic-wave": topographicWaveConfig,
 };
 
 interface ParticleState {
@@ -333,6 +357,10 @@ export function CanvasVisualizer({
       const noiseMemoryAlpha = alphaFor("noise-memory");
       const latentFlowAlpha = alphaFor("latent-flow");
       const archiveDecoderAlpha = alphaFor("archive-decoder");
+      const asciiFieldAlpha = alphaFor("ascii-field");
+      const orbitalSpectrumAlpha = alphaFor("orbital-spectrum");
+      const spectralGridAlpha = alphaFor("spectral-grid");
+      const topographicWaveAlpha = alphaFor("topographic-wave");
 
       // Track which modes are actively rendering for crossfade validation
       const renderingModes: string[] = [];
@@ -342,6 +370,10 @@ export function CanvasVisualizer({
       if (noiseMemoryAlpha > 0.01) renderingModes.push("noise-memory");
       if (latentFlowAlpha > 0.01) renderingModes.push("latent-flow");
       if (archiveDecoderAlpha > 0.01) renderingModes.push("archive-decoder");
+      if (asciiFieldAlpha > 0.01) renderingModes.push("ascii-field");
+      if (orbitalSpectrumAlpha > 0.01) renderingModes.push("orbital-spectrum");
+      if (spectralGridAlpha > 0.01) renderingModes.push("spectral-grid");
+      if (topographicWaveAlpha > 0.01) renderingModes.push("topographic-wave");
       debugRef.current.modes = renderingModes;
       debugRef.current.warning = renderingModes.length > 2 ? `WARNING: ${renderingModes.length} MODES` : "";
 
@@ -349,7 +381,7 @@ export function CanvasVisualizer({
       debugRef.current.activeMode = activeVisualMode;
       debugRef.current.fps = perf.fps;
       debugRef.current.particleCount = particleMemRef.current.length;
-      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0) + (archiveDecoderAlpha > 0.01 ? 1 : 0);
+      debugRef.current.layers = (signalFieldAlpha > 0.01 ? 1 : 0) + (spatialRhythmAlpha > 0.01 ? 1 : 0) + (particleMemoryAlpha > 0.01 ? 1 : 0) + (noiseMemoryAlpha > 0.01 ? 1 : 0) + (latentFlowAlpha > 0.01 ? 1 : 0) + (archiveDecoderAlpha > 0.01 ? 1 : 0) + (asciiFieldAlpha > 0.01 ? 1 : 0) + (orbitalSpectrumAlpha > 0.01 ? 1 : 0) + (spectralGridAlpha > 0.01 ? 1 : 0) + (topographicWaveAlpha > 0.01 ? 1 : 0);
       const currentCfg = rendererConfigs[activeVisualMode] || signalFieldConfig;
       debugRef.current.cfgName = currentCfg.name;
       debugRef.current.globalAlpha = currentCfg.opacity;
@@ -359,7 +391,7 @@ export function CanvasVisualizer({
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
-      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || archiveDecoderAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
+      if (particleMemoryAlpha > 0.01 || noiseMemoryAlpha > 0.01 || latentFlowAlpha > 0.01 || archiveDecoderAlpha > 0.01 || asciiFieldAlpha > 0.01 || orbitalSpectrumAlpha > 0.01 || spectralGridAlpha > 0.01 || topographicWaveAlpha > 0.01 || signalFieldAlpha < 0.99 || spatialRhythmAlpha < 0.99) {
         const density = state.density;
         const pmCount = Math.round(getParticleCount(density) * adapt);
         const pmCurrent = particleMemRef.current.length;
@@ -511,6 +543,34 @@ export function CanvasVisualizer({
           drawArchiveDecoder(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
           accumCtx.globalAlpha = 1;
         }
+
+        // ASCII Field layers
+        if (asciiFieldAlpha > 0.01) {
+          accumCtx.globalAlpha = asciiFieldAlpha;
+          drawAsciiField(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
+
+        // Orbital Spectrum layers
+        if (orbitalSpectrumAlpha > 0.01) {
+          accumCtx.globalAlpha = orbitalSpectrumAlpha;
+          drawOrbitalSpectrum(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
+
+        // Spectral Grid layers
+        if (spectralGridAlpha > 0.01) {
+          accumCtx.globalAlpha = spectralGridAlpha;
+          drawSpectralGrid(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
+
+        // Topographic Wave layers
+        if (topographicWaveAlpha > 0.01) {
+          accumCtx.globalAlpha = topographicWaveAlpha;
+          drawTopographicWave(accumCtx, w, h, dataArray, bufferLength, avg, now, dt, state);
+          accumCtx.globalAlpha = 1;
+        }
       }
       {
         const arr = timings.accumDraw;
@@ -563,6 +623,30 @@ export function CanvasVisualizer({
       if (archiveDecoderAlpha > 0.01) {
         ctx.globalAlpha = archiveDecoderAlpha;
         drawArchiveDecoder(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
+      if (asciiFieldAlpha > 0.01) {
+        ctx.globalAlpha = asciiFieldAlpha;
+        drawAsciiField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
+      if (orbitalSpectrumAlpha > 0.01) {
+        ctx.globalAlpha = orbitalSpectrumAlpha;
+        drawOrbitalSpectrum(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
+      if (spectralGridAlpha > 0.01) {
+        ctx.globalAlpha = spectralGridAlpha;
+        drawSpectralGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        ctx.globalAlpha = 1;
+      }
+
+      if (topographicWaveAlpha > 0.01) {
+        ctx.globalAlpha = topographicWaveAlpha;
+        drawTopographicWave(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         ctx.globalAlpha = 1;
       }
       {
@@ -626,6 +710,14 @@ export function CanvasVisualizer({
           drawLatentFlow(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else if (activeVisualMode === "archive-decoder") {
           drawArchiveDecoder(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "ascii-field") {
+          drawAsciiField(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "orbital-spectrum") {
+          drawOrbitalSpectrum(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "spectral-grid") {
+          drawSpectralGrid(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
+        } else if (activeVisualMode === "topographic-wave") {
+          drawTopographicWave(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         } else {
           drawSpatialRhythm(ctx, w, h, dataArray, bufferLength, avg, now, dt, state);
         }
@@ -1778,6 +1870,140 @@ function drawArchiveDecoder(
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(oc, 0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
+}
+
+/* ── ASCII Field ── */
+function drawAsciiField(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const size = Math.max(6, 14 - s.density * 8);
+  const cols = Math.ceil(w / size), rows = Math.ceil(h / size);
+  const chars = ".:;+=xX$&#";
+  ctx.font = `${size}px monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const nx = c / cols, ny = r / rows;
+      const phase = now * (0.05 + s.speed * 0.05) + nx * 3 + ny * 2;
+      const val = Math.sin(phase) * bass * 3 + Math.cos(nx * 4 + ny * 3 + now * 0.03) * mids * 1.5;
+      const signal = Math.max(0, Math.min(1, 0.5 + val * 0.5));
+      const ci = Math.floor(signal * chars.length) % chars.length;
+      const alpha = Math.max(0.05, 0.1 + signal * 0.4 + highs * 0.3);
+      const cx = c * size + size / 2 + Math.sin(phase * 0.5 + ny) * bass * 20;
+      const cy = r * size + size / 2 + Math.cos(phase * 0.5 + nx) * bass * 20;
+      ctx.fillStyle = s.palette[ci % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      ctx.fillText(chars[ci], cx, cy);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── Topographic Wave ── */
+function drawTopographicWave(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const density = Math.floor(6 + s.density * 14);
+  const speed = s.speed;
+  const rowH = h / density;
+  const bassDisp = bass * 80 * s.audioSensitivity;
+  for (let r = 0; r < density; r++) {
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 3) {
+      const nx = x / w;
+      const phase = now * (0.04 + speed * 0.03) + nx * 4 + r * 0.8;
+      const wave = Math.sin(phase) * bassDisp + Math.sin(phase * 2.3 + mids * 2) * 20 + Math.sin(phase * 0.7 + r * 1.3) * 10;
+      const y = r * rowH + wave + Math.sin(nx * 6 + now * 0.02 * speed + r * 0.5) * 5;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    const alpha = Math.max(0.06, 0.12 + bass * 0.4 + highs * 0.15);
+    ctx.strokeStyle = getColor(r, s.palette, density) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+    ctx.lineWidth = 0.5 + bass * 1.5 + s.glow * 0.5;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ── Orbital Spectrum ── */
+function drawOrbitalSpectrum(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const cx = w / 2, cy = h / 2;
+  const orbitCount = 3 + Math.floor(s.density * 4);
+  const nodesPerOrbit = Math.floor(6 + s.density * 18);
+  const baseR = Math.min(w, h) * 0.06;
+  for (let o = 0; o < orbitCount; o++) {
+    const orbitR = baseR * (1 + o * 1.2 + bass * 0.8);
+    const eccentricity = 0.1 + s.randomness * 0.3 + mids * 0.2;
+    const speed = 0.1 + s.speed * 0.15 + o * 0.03;
+    // Orbit path
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, orbitR, orbitR * (1 - eccentricity), 0, 0, Math.PI * 2);
+    ctx.strokeStyle = s.palette[o % s.palette.length] + "18";
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+    // Orbiting nodes
+    for (let n = 0; n < nodesPerOrbit; n++) {
+      const angle = now * speed + (n / nodesPerOrbit) * Math.PI * 2;
+      const rx = orbitR, ry = orbitR * (1 - eccentricity);
+      const px = cx + Math.cos(angle) * rx;
+      const py = cy + Math.sin(angle) * ry;
+      const size = 0.5 + bass * 1.5 + highs * 1;
+      const alpha = Math.max(0.05, 0.1 + bass * 0.3 + highs * 0.3);
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fillStyle = s.palette[n % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      ctx.fill();
+    }
+  }
+  // Core
+  const coreSize = Math.min(w, h) * 0.04 * (0.5 + bass * 0.5);
+  const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 4);
+  gr.addColorStop(0, s.palette[0] + "40");
+  gr.addColorStop(1, "transparent");
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreSize * 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+/* ── Spectral Grid ── */
+function drawSpectralGrid(
+  ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
+  avg: number, now: number, dt: number, s: InterpolatedState,
+) {
+  const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+  const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const cols = Math.floor(10 + s.density * 20);
+  const rows = Math.floor(6 + s.density * 10);
+  const cellW = w / cols, cellH = h / rows;
+  const drift = now * (0.01 + s.speed * 0.02);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = Math.floor(((c + drift * 3) % cols) / cols * len);
+      const val = data[idx] / 255;
+      const height = val * h * 0.4 * (0.5 + bass * 0.5) + highs * h * 0.05;
+      const x = c * cellW + cellW * 0.5 + Math.sin(drift + r * 0.5) * 5;
+      const y = r * cellH + cellH - height;
+      const alpha = Math.max(0.05, 0.1 + val * 0.5 + mids * 0.15);
+      const col = getColor(c + r * cols, s.palette, cols * rows);
+      ctx.fillStyle = col + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+      ctx.fillRect(x - cellW * 0.3, y, cellW * 0.6, height);
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 
 /* ── Glitch / VHS post-processing ── */

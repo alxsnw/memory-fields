@@ -14,10 +14,10 @@ const VISUAL_MODELS: { value: VisualModel; label: string; enabled: boolean }[] =
   { value: "noise-memory", label: "Noise Memory", enabled: true },
   { value: "latent-flow", label: "Latent Flow", enabled: true },
   { value: "archive-decoder", label: "Archive Decoder", enabled: true },
-  { value: "topographic-wave", label: "Topographic Wave", enabled: false },
-  { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: false },
-  { value: "spectral-grid", label: "Spectral Grid", enabled: false },
-  { value: "ascii-field", label: "ASCII Field", enabled: false },
+  { value: "ascii-field", label: "ASCII Field", enabled: true },
+  { value: "orbital-spectrum", label: "Orbital Spectrum", enabled: true },
+  { value: "spectral-grid", label: "Spectral Grid", enabled: true },
+  { value: "topographic-wave", label: "Topographic Wave", enabled: true },
 ];
 
 interface FieldControlsProps {
