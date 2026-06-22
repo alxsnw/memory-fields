@@ -30,6 +30,8 @@ const FLOORS = {
 };
 
 let __connCounter = 0;
+let __lowEnergy = 0;
+let __transient = 0;
 
 interface RendererConfig {
   name: string;
@@ -343,6 +345,8 @@ export function CanvasVisualizer({
       debugRef.current.highRaw = highRaw;
       debugRef.current.rms = rms;
       debugRef.current.transient = transient;
+      __lowEnergy = lowEnergy;
+      __transient = transient;
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
@@ -373,10 +377,11 @@ export function CanvasVisualizer({
         const isKick = bassDeriv > 1.8 && bass > 0.25;
 
         const particles = particleMemRef.current;
+        const pmDrive = Math.min(1, bass + __lowEnergy * 0.5 + __transient * 0.3);
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           const val = dataArray[Math.min(p.freqBin, bufferLength - 1)] / 255;
-          p.activity = val * 0.5 + bass * 0.3 + mids * 0.2;
+          p.activity = val * 0.5 + pmDrive * 0.5;
 
           const dx = p.x - w / 2;
           const dy = p.y - h / 2;
@@ -389,8 +394,8 @@ export function CanvasVisualizer({
           const flowVx = -ny * orbitStrength;
           const flowVy = nx * orbitStrength;
 
-          // Bass: outward pressure
-          const bassPush = bass * 2.0 * sensitivity * flowMul;
+          // Bass: outward pressure (boosted by drive + transient)
+          const bassPush = pmDrive * 3.0 * sensitivity * flowMul;
           const pushVx = nx * bassPush * (1 - p.depth * 0.3);
           const pushVy = ny * bassPush * (1 - p.depth * 0.3);
 
@@ -742,9 +747,12 @@ function drawCore(
   const cx = w / 2;
   const cy = h / 2;
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
+  const lo = __lowEnergy;
+  const tr = __transient;
+  const drive = Math.min(1, bass + lo * 0.5 + tr * 0.3);
   const pulse = Math.sin(now * 0.5) * 0.5 + 0.5;
-  const coreSize = Math.min(w, h) * 0.04 * s.fieldScale * (0.5 + avg * 0.5 + bass * 0.3);
-  const glow = Math.max(FLOORS.coreGlow, s.glow * (0.6 + avg * 0.4));
+  const coreSize = Math.min(w, h) * 0.04 * s.fieldScale * (0.5 + avg * 0.5 + drive * 0.5);
+  const glow = Math.max(FLOORS.coreGlow, s.glow * (0.6 + avg * 0.4 + tr * 0.3));
 
   for (let i = 2; i >= 0; i--) {
     const radius = coreSize * (1 + i * 0.7 + pulse * 0.15);
@@ -767,30 +775,34 @@ function drawSignalField(
   ctx: CanvasRenderingContext2D, w: number, h: number, data: Uint8Array, len: number,
   avg: number, now: number, dt: number, s: InterpolatedState,
 ) {
-  // Fullscreen brightness pulse driven by RMS
-  const pulse = Math.max(0.1, avg * s.audioSensitivity * 0.3);
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const lo = __lowEnergy;
+  const tr = __transient;
+  const drive = Math.min(1, avg + lo * 0.3 + tr * 0.2);
+
+  // Fullscreen brightness pulse driven by drive
+  const pulse = Math.max(0.15, drive * s.audioSensitivity * 0.5);
 
   // Large signal ripples
-  const rippleCount = 3 + Math.floor(s.density * 3);
+  const rippleCount = 3 + Math.floor(s.density * 3 + lo * 2);
   for (let r = 0; r < rippleCount; r++) {
     const phase = now * (0.15 + s.speed * 0.2) + r * 2.1;
     const rippleRadius = ((Math.sin(phase) * 0.5 + 0.5) * 0.6 + 0.2) * Math.max(w, h) * 0.5;
     const cx = w / 2 + Math.sin(now * 0.05 + r) * w * 0.08;
     const cy = h / 2 + Math.cos(now * 0.04 + r * 0.7) * h * 0.08;
-    const width = 30 + bass * 60;
+    const width = 30 + bass * 60 + lo * 40;
 
     const gr = ctx.createRadialGradient(cx, cy, rippleRadius - width, cx, cy, rippleRadius + width);
     gr.addColorStop(0, "transparent");
-    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + avg * 25).toString(16).padStart(2, "0"));
-    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + avg * 18).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + drive * 35).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + drive * 25).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.beginPath();
     ctx.arc(cx, cy, rippleRadius + width, 0, Math.PI * 2);
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.5);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.6);
     ctx.fill();
   }
 
@@ -835,12 +847,15 @@ function drawSpatialRhythm(
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+  const lo = __lowEnergy;
+  const tr = __transient;
+  const drive = Math.min(1, bass + lo * 0.5 + tr * 0.3);
 
-  // Horizontal wave bands driven by bass
+  // Horizontal wave bands driven by bass + lowEnergy + transient
   const waveCount = 5 + Math.floor(s.density * 8);
   for (let i = 0; i < waveCount; i++) {
     const yBase = (h / waveCount) * i;
-    const amplitude = bass * 80 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+    const amplitude = drive * 120 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
     const frequency = 0.01 + s.speed * 0.02;
     const phase = now * (0.3 + s.speed * 0.5) + i * 0.8;
 
@@ -854,19 +869,19 @@ function drawSpatialRhythm(
       ctx.lineTo(x, y);
     }
 
-    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + bass * 0.3);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + drive * 0.4);
     ctx.strokeStyle = getColor(i, s.palette, waveCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1.5 + bass * 2;
+    ctx.lineWidth = 1.5 + drive * 3;
     ctx.stroke();
   }
 
-  // Arc pulses from center driven by beat
-  const arcCount = 3 + Math.floor(avg * 5);
+  // Arc pulses from center driven by beat + transient
+  const arcCount = 3 + Math.floor(avg * 5 + lo * 3);
   const cx = w / 2;
   const cy = h / 2;
 
   for (let i = 0; i < arcCount; i++) {
-    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + bass * 0.5);
+    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive * 0.8 + tr * 0.5);
     const startAngle = now * (0.2 + s.speed * 0.3) + i * 1.2;
     const sweep = Math.PI * (0.3 + mids * 0.4);
 
