@@ -167,7 +167,8 @@ export function CanvasVisualizer({
   const prevBassRef = useRef(0);
   const pmInitRef = useRef(false);
   const perfRef = useRef({ fps: 60, frameTimes: [] as number[], quality: 1, frames: 0 });
-  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "", cfgName: "", accumDecay: 0, globalAlpha: 1, boost: 1, contrast: 1, lineWidth: 1 });
+  const debugRef = useRef({ activeMode: "", fps: 60, avgFps: 60, frameTime: 0, renderTime: 0, dpr: 1, particleCount: 0, connectionCount: 0, layers: 0, modes: [] as string[], warning: "", cfgName: "", accumDecay: 0, globalAlpha: 1, boost: 1, contrast: 1, lineWidth: 1, subRaw: 0, bassRaw: 0, lowMidRaw: 0, subEnv: 0, bassEnv: 0, lowEnergy: 0 });
+  const bassEnvRef = useRef({ sub: 0, bass: 0, lowMid: 0 });
   const connCountRef = useRef(0);
   const timingRef = useRef({
     audioAnalysis: [] as number[],
@@ -257,7 +258,33 @@ export function CanvasVisualizer({
       const bufferLength = analyserNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       analyserNode.getByteFrequencyData(dataArray);
+      
+      // Frequency bands mapped to ~20-400Hz range (fftSize=256, ~44100Hz)
+      // Bin 0 ≈ 0-172Hz, Bin 1 ≈ 172-344Hz, Bin 2 ≈ 344-516Hz
+      const subRaw = dataArray[0] / 255;       // ~0-172Hz — sub
+      const bassRaw = dataArray.slice(0, 2).reduce((a, b) => a + b, 0) / (2 * 255);  // ~0-344Hz — bass
+      const lowMidRaw = dataArray.slice(1, 3).reduce((a, b) => a + b, 0) / (2 * 255); // ~172-516Hz — low-mid
+
+      // Smoothed envelopes: fast attack, slow release
+      const env = bassEnvRef.current;
+      const attack = 0.35;
+      const release = 0.06;
+      env.sub += (subRaw - env.sub) * (subRaw > env.sub ? attack : release);
+      env.bass += (bassRaw - env.bass) * (bassRaw > env.bass ? attack : release);
+      env.lowMid += (lowMidRaw - env.lowMid) * (lowMidRaw > env.lowMid ? attack : release);
+
+      // Combined low-energy drive
+      const lowEnergy = Math.min(1, env.sub * 2.5 + env.bass * 2.0 + env.lowMid * 0.8);
+
+      // Standard bands for non-low-end use (highs unchanged)
       const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength / 255;
+      const mids = dataArray.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
+      const highs = dataArray.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
+
+      // Inject lowEnergy into first 3 FFT bins so draw functions get the smoothed envelope
+      dataArray[0] = Math.min(255, lowEnergy * 255 * 1.5);
+      dataArray[1] = Math.min(255, lowEnergy * 255 * 1.2);
+      dataArray[2] = Math.min(255, lowEnergy * 255 * 0.8);
       const timings = timingRef.current;
       const tArr = timings.audioAnalysis;
       tArr.push(performance.now() - tAudio);
@@ -294,6 +321,12 @@ export function CanvasVisualizer({
       debugRef.current.boost = currentCfg.boost;
       debugRef.current.contrast = currentCfg.contrast;
       debugRef.current.lineWidth = currentCfg.lineWidth;
+      debugRef.current.subRaw = subRaw;
+      debugRef.current.bassRaw = bassRaw;
+      debugRef.current.lowMidRaw = lowMidRaw;
+      debugRef.current.subEnv = env.sub;
+      debugRef.current.bassEnv = env.bass;
+      debugRef.current.lowEnergy = lowEnergy;
 
       // Initialize/update Particle Memory state
       const tParticleUpdate = performance.now();
@@ -470,6 +503,12 @@ export function CanvasVisualizer({
         if (arr.length > 120) arr.shift();
       }
       debugRef.current.connectionCount = __connCounter;
+      debugRef.current.subRaw = subRaw;
+      debugRef.current.bassRaw = bassRaw;
+      debugRef.current.lowMidRaw = lowMidRaw;
+      debugRef.current.subEnv = env.sub;
+      debugRef.current.bassEnv = env.bass;
+      debugRef.current.lowEnergy = lowEnergy;
 
       // Glitch pass
       if (glitchAmount > 0) {
@@ -600,6 +639,7 @@ export function CanvasVisualizer({
           {debugRef.current.layers}lyr {debugRef.current.modes.join("+")}
         </div>
         {debugRef.current.warning && <div className="text-red/80 font-bold">{debugRef.current.warning}</div>}
+        <div className="text-frost/20">SUB:{debugRef.current.subRaw.toFixed(2)}→{debugRef.current.subEnv.toFixed(2)} B:{debugRef.current.bassRaw.toFixed(2)}→{debugRef.current.bassEnv.toFixed(2)} LO:{debugRef.current.lowEnergy.toFixed(2)}</div>
         <div className="text-frost/20">q{perfRef.current.quality.toFixed(2)}</div>
       </div>
     </>
