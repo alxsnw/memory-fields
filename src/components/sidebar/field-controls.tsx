@@ -53,10 +53,142 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
 const scale = (v: number | undefined) => Math.round((v ?? 0) * 100);
 const unscale = (v: number) => v / 100;
 
+type Preset = "calm" | "balanced" | "intense";
+
+const PRESET_LABELS: Record<Preset, string> = { calm: "Calm", balanced: "Balanced", intense: "Intense" };
+
+// Per-mode preset mappings. Each preset overrides the mode-specific sliders.
+const MODE_PRESETS: Record<string, Record<Preset, Partial<VisualParams> & { _preset?: string }>> = {
+  "spatial-rhythm": {
+    calm:     { density: 0.3, speed: 0.3, randomness: 0.2, memory: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, randomness: 0.7, memory: 0.6, _preset: "intense" },
+  },
+  "signal-field": {
+    calm:     { density: 0.3, speed: 0.3, detail: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, detail: 0.8, _preset: "intense" },
+  },
+  "particle-memory": {
+    calm:     { density: 0.3, speed: 0.3, memory: 0.5, randomness: 0.2, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, memory: 0.8, randomness: 0.7, _preset: "intense" },
+  },
+  "noise-memory": {
+    calm:     { density: 0.3, speed: 0.3, memory: 0.5, randomness: 0.2, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, memory: 0.8, randomness: 0.7, _preset: "intense" },
+  },
+  "latent-flow": {
+    calm:     { density: 0.3, speed: 0.3, glow: 0.3, randomness: 0.2, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, glow: 0.7, randomness: 0.7, _preset: "intense" },
+  },
+  "archive-decoder": {
+    calm:     { density: 0.3, randomness: 0.1, speed: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, randomness: 0.7, speed: 0.8, _preset: "intense" },
+  },
+  "ascii-field": {
+    calm:     { density: 0.3, randomness: 0.2, detail: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, randomness: 0.7, detail: 0.8, _preset: "intense" },
+  },
+  "orbital-spectrum": {
+    calm:     { density: 0.3, randomness: 0.2, speed: 0.3, glow: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, randomness: 0.7, speed: 0.8, glow: 0.7, _preset: "intense" },
+  },
+  "spectral-grid": {
+    calm:     { density: 0.3, speed: 0.3, glow: 0.3, memory: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, glow: 0.7, memory: 0.6, _preset: "intense" },
+  },
+  "topographic-wave": {
+    calm:     { density: 0.3, speed: 0.3, memory: 0.3, glow: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, speed: 0.8, memory: 0.6, glow: 0.7, _preset: "intense" },
+  },
+  "pulse-field": {
+    calm:     { density: 0.3, randomness: 0.2, speed: 0.3, memory: 0.3, _preset: "calm" },
+    balanced: { _preset: "balanced" },
+    intense:  { density: 0.8, randomness: 0.7, speed: 0.8, memory: 0.6, _preset: "intense" },
+  },
+};
+
+function getCurrentPreset(visualParams: VisualParams, visualModel: VisualModel): Preset {
+  const stored = (visualParams as any)._preset;
+  if (stored === "calm" || stored === "intense") return stored;
+  return "balanced";
+}
+
 export function FieldControls({
   visualModel, paletteMode, visualParams, isHost,
   onModelChange, onPaletteChange, onParamChange, onLiveParamChange, onMutate, onExport,
 }: FieldControlsProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const currentPreset = getCurrentPreset(visualParams, visualModel);
+
+  const handlePreset = (preset: Preset) => {
+    const modePresets = MODE_PRESETS[visualModel];
+    if (!modePresets) return;
+    const values = modePresets[preset];
+    onParamChange(values);
+  };
+
+  // Model-specific sliders for Advanced section
+  const renderAdvancedSliders = () => {
+    const sliders: React.ReactNode[] = [];
+    const add = (label: string, param: keyof VisualParams, opts?: { disabled?: boolean }) => {
+      sliders.push(
+        <FieldSlider key={param} label={label} value={scale(visualParams[param] as number | undefined)}
+          onChange={(v) => onParamChange({ [param]: unscale(v) } as any)}
+          onLiveChange={(v) => onLiveParamChange?.({ [param]: unscale(v) } as any)}
+          disabled={opts?.disabled}
+        />
+      );
+    };
+
+    switch (visualModel) {
+      case "signal-field":
+        add("Core Trace", "coreTraceAmount"); add("Density", "density"); add("Speed", "speed"); add("Contrast", "detail");
+        break;
+      case "spatial-rhythm":
+        add("Density", "density"); add("Speed", "speed"); add("Tension", "randomness"); add("Pulse", "memory");
+        break;
+      case "particle-memory":
+        add("Density", "density"); add("Speed", "speed"); add("Memory", "memory"); add("Flow", "randomness");
+        break;
+      case "noise-memory":
+        add("Density", "density"); add("Speed", "speed"); add("Memory", "memory"); add("Drift", "randomness");
+        break;
+      case "latent-flow":
+        add("Density", "density"); add("Speed", "speed"); add("Glow", "glow"); add("Drift", "randomness");
+        break;
+      case "archive-decoder":
+        add("Reconstruction", "density"); add("Corruption", "randomness"); add("Signal", "speed");
+        break;
+      case "ascii-field":
+        add("Glyph", "density"); add("Distortion", "randomness"); add("Contrast", "detail");
+        break;
+      case "orbital-spectrum":
+        add("Orbits", "density"); add("Gravity", "randomness"); add("Drift", "speed"); add("Glow", "glow");
+        break;
+      case "spectral-grid":
+        add("Density", "density"); add("Speed", "speed"); add("Glow", "glow"); add("Memory", "memory");
+        break;
+      case "topographic-wave":
+        add("Density", "density"); add("Speed", "speed"); add("Memory", "memory"); add("Glow", "glow");
+        break;
+      case "pulse-field":
+        add("Density", "density"); add("Energy", "randomness"); add("Ripple", "speed"); add("Shockwave", "memory");
+        break;
+    }
+    // Global: Archive + Glitch
+    add("Archive", "vhsAmount");
+    add("Glitch", "glitchAmount");
+    return sliders;
+  };
   return (
     <div className="h-full flex flex-col mt-8">
       <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle mb-4">
@@ -88,115 +220,35 @@ export function FieldControls({
           </div>
         </Section>
 
-        {/* Field */}
-        <Section title="Field">
-          <div className="flex gap-2 mb-2">
-            {(["mineral", "spectral"] as PaletteMode[]).map((mode) => (
+        {/* Preset */}
+        <div className="border-b border-white/[0.06] pb-3 mb-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-subtle mb-2">Preset</div>
+          <div className="flex gap-1.5">
+            {(["calm", "balanced", "intense"] as Preset[]).map((p) => (
               <button
-                key={mode}
-                onClick={() => isHost && onPaletteChange(mode)}
+                key={p}
+                onClick={() => isHost && handlePreset(p)}
                 disabled={!isHost}
                 className={cn(
                   "flex-1 px-2 py-1.5 rounded-lg border text-[10px] font-mono uppercase tracking-[0.06em] transition-colors",
-                  paletteMode === mode
+                  currentPreset === p
                     ? "bg-white/[0.06] border-white/[0.14] text-frost"
-                    : "bg-white/[0.02] border-white/[0.06] text-subtle",
+                    : "bg-white/[0.02] border-white/[0.06] text-subtle hover:bg-white/[0.04]",
                   !isHost && "opacity-60 cursor-not-allowed",
                 )}
               >
-                {mode}
+                {PRESET_LABELS[p]}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Model-specific controls */}
-          {(() => {
-            switch (visualModel) {
-              case "signal-field":
-                return <>
-                  <FieldSlider label="Core Trace" value={scale(visualParams.coreTraceAmount)} onChange={(v) => onParamChange({ coreTraceAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ coreTraceAmount: unscale(v) })} />
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Contrast" value={scale(visualParams.detail)} onChange={(v) => onParamChange({ detail: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ detail: unscale(v) })} />
-                </>;
-              case "spatial-rhythm":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Tension" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                  <FieldSlider label="Pulse" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                </>;
-              case "particle-memory":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                  <FieldSlider label="Flow" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                </>;
-              case "noise-memory":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                  <FieldSlider label="Drift" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                </>;
-              case "latent-flow":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Glow" value={scale(visualParams.glow)} onChange={(v) => onParamChange({ glow: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glow: unscale(v) })} />
-                  <FieldSlider label="Drift" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                </>;
-              case "archive-decoder":
-                return <>
-                  <FieldSlider label="Reconstruction" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Corruption" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                  <FieldSlider label="Signal" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                </>;
-              case "ascii-field":
-                return <>
-                  <FieldSlider label="Glyph" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Distortion" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                  <FieldSlider label="Contrast" value={scale(visualParams.detail)} onChange={(v) => onParamChange({ detail: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ detail: unscale(v) })} />
-                </>;
-              case "orbital-spectrum":
-                return <>
-                  <FieldSlider label="Orbits" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Gravity" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                  <FieldSlider label="Drift" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Glow" value={scale(visualParams.glow)} onChange={(v) => onParamChange({ glow: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glow: unscale(v) })} />
-                </>;
-              case "spectral-grid":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Glow" value={scale(visualParams.glow)} onChange={(v) => onParamChange({ glow: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glow: unscale(v) })} />
-                  <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                </>;
-              case "topographic-wave":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Speed" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Memory" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                  <FieldSlider label="Glow" value={scale(visualParams.glow)} onChange={(v) => onParamChange({ glow: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glow: unscale(v) })} />
-                </>;
-              case "pulse-field":
-                return <>
-                  <FieldSlider label="Density" value={scale(visualParams.density)} onChange={(v) => onParamChange({ density: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ density: unscale(v) })} />
-                  <FieldSlider label="Energy" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
-                  <FieldSlider label="Ripple" value={scale(visualParams.speed)} onChange={(v) => onParamChange({ speed: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ speed: unscale(v) })} />
-                  <FieldSlider label="Shockwave" value={scale(visualParams.memory)} onChange={(v) => onParamChange({ memory: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ memory: unscale(v) })} />
-                </>;
-              default:
-                return null;
-            }
-          })()}
-
-          <FieldSlider label="Archive" value={scale(visualParams.vhsAmount)} onChange={(v) => onParamChange({ vhsAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ vhsAmount: unscale(v) })} />
-          <FieldSlider label="Glitch" value={scale(visualParams.glitchAmount)} onChange={(v) => onParamChange({ glitchAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glitchAmount: unscale(v) })} />
+        {/* Advanced (collapsed) */}
+        <Section title="Advanced" defaultOpen={false}>
+          {renderAdvancedSliders()}
         </Section>
 
-        {/* Processing - hidden for now */}
+        {/* Hidden sections (kept for reference, not shown) */}
         {false && <Section title="Processing" defaultOpen={false}>
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-subtle">Smoothing</span>
@@ -222,8 +274,6 @@ export function FieldControls({
           <FieldSlider label="Edge Reactivity" value={scale(visualParams.edgeReactivity)} onChange={(v) => onParamChange({ edgeReactivity: unscale(v) })} />
           <FieldSlider label="Center Bias" value={scale(visualParams.centerBias)} onChange={(v) => onParamChange({ centerBias: unscale(v) })} />
         </Section>}
-
-        {/* Post-Processing - hidden for now */}
         {false && <Section title="Post-Processing" defaultOpen={false}>
           <FieldSlider label="Bloom" value={scale(visualParams.bloom)} onChange={(v) => onParamChange({ bloom: unscale(v) })} />
           <FieldSlider label="Grain" value={scale(visualParams.grain)} onChange={(v) => onParamChange({ grain: unscale(v) })} />
@@ -239,42 +289,24 @@ export function FieldControls({
           <FieldSlider label="CRT Curve" value={scale(visualParams.crtCurve)} onChange={(v) => onParamChange({ crtCurve: unscale(v) })} />
           <FieldSlider label="Phosphor" value={scale(visualParams.phosphor)} onChange={(v) => onParamChange({ phosphor: unscale(v) })} />
         </Section>}
-
-        {/* Variation - hidden for now */}
         {false && <Section title="Variation" defaultOpen={false}>
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-subtle">Seed</span>
             <span className="font-mono text-[10px] text-frost/60">{visualParams.randomness}</span>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-[10px] font-mono"
-            onClick={onMutate}
-            disabled={!isHost}
-          >
+          <Button variant="ghost" size="sm" className="w-full text-[10px] font-mono" onClick={onMutate} disabled={!isHost}>
             <Shuffle className="w-3 h-3 mr-1.5" />
             Mutate Field
           </Button>
         </Section>}
-
-        {/* Export - hidden for now */}
         {false && <Section title="Export" defaultOpen={false}>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono" onClick={() => onExport("png")}>
-              PNG
-            </Button>
-            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono" onClick={() => onExport("jpeg")}>
-              JPEG
-            </Button>
+            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono" onClick={() => onExport("png")}>PNG</Button>
+            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono" onClick={() => onExport("jpeg")}>JPEG</Button>
           </div>
           <div className="flex gap-2 mt-2">
-            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono opacity-40" disabled>
-              GIF
-            </Button>
-            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono opacity-40" disabled>
-              Video
-            </Button>
+            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono opacity-40" disabled>GIF</Button>
+            <Button variant="ghost" size="sm" className="flex-1 text-[10px] font-mono opacity-40" disabled>Video</Button>
           </div>
         </Section>}
       </div>
