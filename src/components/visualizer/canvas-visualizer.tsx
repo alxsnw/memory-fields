@@ -778,31 +778,31 @@ function drawSignalField(
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
-  const lo = __lowEnergy;
-  const tr = __transient;
-  const drive = Math.min(1, avg + lo * 0.3 + tr * 0.2);
+  const lo = __lowEnergy * 2;
+  const tr = __transient * 3;
+  const drive = Math.min(1, avg + lo + tr);
 
-  // Fullscreen brightness pulse driven by drive
-  const pulse = Math.max(0.15, drive * s.audioSensitivity * 0.5);
+  // Fullscreen brightness pulse
+  const pulse = Math.max(0.25, drive * s.audioSensitivity * 1.2);
 
-  // Large signal ripples
-  const rippleCount = 3 + Math.floor(s.density * 3 + lo * 2);
+  // Large signal ripples driven by lowEnergy + transient
+  const rippleCount = 3 + Math.floor(s.density * 3 + lo * 4);
   for (let r = 0; r < rippleCount; r++) {
     const phase = now * (0.15 + s.speed * 0.2) + r * 2.1;
     const rippleRadius = ((Math.sin(phase) * 0.5 + 0.5) * 0.6 + 0.2) * Math.max(w, h) * 0.5;
     const cx = w / 2 + Math.sin(now * 0.05 + r) * w * 0.08;
     const cy = h / 2 + Math.cos(now * 0.04 + r * 0.7) * h * 0.08;
-    const width = 30 + bass * 60 + lo * 40;
+    const width = 30 + bass * 60 + lo * 80;
 
     const gr = ctx.createRadialGradient(cx, cy, rippleRadius - width, cx, cy, rippleRadius + width);
     gr.addColorStop(0, "transparent");
-    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + drive * 35).toString(16).padStart(2, "0"));
-    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + drive * 25).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.4, s.palette[r % s.palette.length] + Math.floor(8 + drive * 60).toString(16).padStart(2, "0"));
+    gr.addColorStop(0.6, s.palette[(r + 1) % s.palette.length] + Math.floor(6 + drive * 45).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.beginPath();
     ctx.arc(cx, cy, rippleRadius + width, 0, Math.PI * 2);
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.6);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 1.0);
     ctx.fill();
   }
 
@@ -813,10 +813,10 @@ function drawSignalField(
     const sx = w / 2 + Math.cos(angle) * Math.max(w, h) * 0.6;
     const sy = h / 2 + Math.sin(angle) * Math.max(w, h) * 0.6;
     const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(w, h) * 0.8);
-    gr.addColorStop(0, s.palette[i % s.palette.length] + Math.floor(4 + highs * 20).toString(16).padStart(2, "0"));
+    gr.addColorStop(0, s.palette[i % s.palette.length] + Math.floor(4 + highs * 20 + lo * 15).toString(16).padStart(2, "0"));
     gr.addColorStop(1, "transparent");
     ctx.fillStyle = gr;
-    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.25);
+    ctx.globalAlpha = Math.max(FLOORS.membraneAlpha, pulse * 0.4);
     ctx.fillRect(0, 0, w, h);
   }
 
@@ -847,15 +847,15 @@ function drawSpatialRhythm(
   const bass = data.slice(0, 4).reduce((a, b) => a + b, 0) / (4 * 255);
   const mids = data.slice(4, 12).reduce((a, b) => a + b, 0) / (8 * 255);
   const highs = data.slice(20, 40).reduce((a, b) => a + b, 0) / (20 * 255);
-  const lo = __lowEnergy;
-  const tr = __transient;
-  const drive = Math.min(1, bass + lo * 0.5 + tr * 0.3);
+  const lo = __lowEnergy * 2;
+  const tr = __transient * 3;
+  const drive = Math.min(1, bass + lo + tr);
 
-  // Horizontal wave bands driven by bass + lowEnergy + transient
+  // Horizontal wave bands
   const waveCount = 5 + Math.floor(s.density * 8);
   for (let i = 0; i < waveCount; i++) {
     const yBase = (h / waveCount) * i;
-    const amplitude = drive * 120 * s.audioSensitivity + mids * 40 * s.audioSensitivity;
+    const amplitude = drive * 200 * s.audioSensitivity + mids * 60 * s.audioSensitivity;
     const frequency = 0.01 + s.speed * 0.02;
     const phase = now * (0.3 + s.speed * 0.5) + i * 0.8;
 
@@ -869,27 +869,27 @@ function drawSpatialRhythm(
       ctx.lineTo(x, y);
     }
 
-    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + drive * 0.4);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.15 + drive * 1.0);
     ctx.strokeStyle = getColor(i, s.palette, waveCount) + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1.5 + drive * 3;
+    ctx.lineWidth = 1.5 + drive * 6;
     ctx.stroke();
   }
 
-  // Arc pulses from center driven by beat + transient
-  const arcCount = 3 + Math.floor(avg * 5 + lo * 3);
+  // Arc pulses from center
+  const arcCount = 3 + Math.floor(avg * 5 + lo * 5);
   const cx = w / 2;
   const cy = h / 2;
 
   for (let i = 0; i < arcCount; i++) {
-    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive * 0.8 + tr * 0.5);
+    const radius = Math.min(w, h) * (0.15 + i * 0.12) * (1 + drive * 1.5 + tr * 2);
     const startAngle = now * (0.2 + s.speed * 0.3) + i * 1.2;
-    const sweep = Math.PI * (0.3 + mids * 0.4);
+    const sweep = Math.PI * (0.3 + mids * 0.4 + tr * 0.3);
 
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, startAngle + sweep);
-    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25);
+    const alpha = Math.max(FLOORS.lineAlpha, 0.1 + avg * 0.25 + tr * 0.5);
     ctx.strokeStyle = s.palette[i % s.palette.length] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
-    ctx.lineWidth = 1 + mids * 2;
+    ctx.lineWidth = 1 + mids * 2 + tr * 3;
     ctx.stroke();
   }
 
@@ -899,7 +899,7 @@ function drawSpatialRhythm(
     const seed = i * 97.3;
     const baseX = (Math.sin(seed + now * 0.1) * 0.5 + 0.5) * w;
     const baseY = (Math.cos(seed * 1.3 + now * 0.08) * 0.5 + 0.5) * h;
-    const drift = bass * 30 * s.audioSensitivity;
+    const drift = bass * 30 * s.audioSensitivity + tr * 40;
     const x = baseX + Math.sin(now * 0.5 + seed) * drift;
     const y = baseY + Math.cos(now * 0.4 + seed * 1.2) * drift;
     const size = 1 + highs * 3;
