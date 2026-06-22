@@ -76,11 +76,7 @@ export function TransportBar({
               <span className="font-mono text-[11px] text-frost/52 w-10 text-right shrink-0 md:text-[10px] md:w-8 lg:text-[11px] lg:w-10">
                 {formatTime(currentTime)}
               </span>
-              <div
-                className={cn(
-                  "flex-1 h-[1px] rounded-full bg-white/[0.10] relative cursor-pointer timeline-hover group",
-                  isHost && "cursor-pointer",
-                )}
+              <div className="flex-1 relative flex items-center h-5 -my-1.5 cursor-pointer group"
                 onClick={(e) => {
                   if (!isHost) return;
                   const rect = e.currentTarget.getBoundingClientRect();
@@ -89,14 +85,16 @@ export function TransportBar({
                   onSeek(pct * duration);
                 }}
               >
-                <div
-                  className="h-full rounded-full bg-soft transition-all duration-100"
-                  style={{ width: `${progress}%` }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-frost opacity-0 group-hover:opacity-100 transition-opacity timeline-thumb"
-                  style={{ left: `${progress}%`, marginLeft: -4 }}
-                />
+                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[1px] rounded-full bg-white/[0.10]">
+                  <div
+                    className="h-full rounded-full bg-soft transition-all duration-100"
+                    style={{ width: `${progress}%` }}
+                  />
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-frost opacity-0 group-hover:opacity-100 transition-opacity timeline-thumb"
+                    style={{ left: `${progress}%`, marginLeft: -4 }}
+                  />
+                </div>
               </div>
               <span className="font-mono text-[11px] text-frost/52 w-10 shrink-0 md:text-[10px] md:w-8 lg:text-[11px] lg:w-10">
                 {formatTime(duration)}
