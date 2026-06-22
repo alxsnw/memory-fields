@@ -849,7 +849,8 @@ export default function FieldPage() {
           state={interpolatedState}
           analyserNode={analyserRef.current}
           isPlaying={isPlaying}
-          glitchAmount={glitchEnabled ? 0.4 : 0}
+          glitchAmount={visualParams.glitchAmount}
+          vhsAmount={visualParams.vhsAmount}
           coreTraceAmount={visualParams.coreTraceAmount}
           activeVisualMode={activeVisualMode}
           prevVisualMode={prevVisualMode}

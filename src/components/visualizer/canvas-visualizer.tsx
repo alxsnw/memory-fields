@@ -10,6 +10,7 @@ interface CanvasVisualizerProps {
   analyserNode: AnalyserNode | null;
   isPlaying: boolean;
   glitchAmount?: number;
+  vhsAmount?: number;
   coreTraceAmount?: number;
   activeVisualMode?: VisualMode;
   prevVisualMode?: VisualMode;
@@ -31,6 +32,7 @@ const FLOORS = {
 
 let __connCounter = 0;
 const __srSmooth = { low: 0, prevRaw: 0 };
+const __glitchState = { timer: 0, nextGlitch: 5, glitchTimer: 0, isGlitching: false, tearX: 0 };
 
 interface RendererConfig {
   name: string;
@@ -161,6 +163,7 @@ export function CanvasVisualizer({
   analyserNode, 
   isPlaying, 
   glitchAmount = 0, 
+  vhsAmount = 0,
   coreTraceAmount = 1,
   activeVisualMode = "spatial-rhythm",
   prevVisualMode = "spatial-rhythm",
@@ -504,9 +507,9 @@ export function CanvasVisualizer({
       }
       debugRef.current.connectionCount = __connCounter;
 
-      // Glitch pass
-      if (glitchAmount > 0) {
-        drawGlitch(ctx, w, h, avg, now, glitchAmount);
+      // Glitch + VHS pass
+      if (glitchAmount > 0 || vhsAmount > 0) {
+        drawGlitch(ctx, w, h, avg, now, glitchAmount, vhsAmount);
       }
     } else {
       // Idle state with transition
@@ -582,7 +585,7 @@ export function CanvasVisualizer({
     debugRef.current.frameTime = frameT;
     debugRef.current.renderTime = rollingAvg(ftArr);
     debugRef.current.avgFps = ftArr.length > 1 ? Math.round((ftArr.length - 1) / ((ftArr[ftArr.length - 1] - ftArr[0]) / 1000)) : 60;
-  }, [state, analyserNode, isPlaying, glitchAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
+  }, [state, analyserNode, isPlaying, glitchAmount, vhsAmount, coreTraceAmount, activeVisualMode, prevVisualMode, transitionProgress, idleTransitionProgress, paletteMode]);
   drawRef.current = draw;
 
   useEffect(() => {
@@ -1150,63 +1153,112 @@ function drawNoiseMemory(
 
 /* ── Glitch / VHS post-processing ── */
 function drawGlitch(
-  ctx: CanvasRenderingContext2D, w: number, h: number, avg: number, now: number, amount: number,
+  ctx: CanvasRenderingContext2D, w: number, h: number, avg: number, now: number, glitch: number, vhs: number,
 ) {
-  const intensity = Math.min(1, amount * (0.5 + avg * 0.5));
+  const strength = Math.min(1, vhs);
+  const corrupt = __glitchState;
 
-  if (intensity < 0.05) return;
+  // — Analog Layer (always present when strength > 0) —
 
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-
-  // Scanlines
-  const scanlineStrength = intensity * 0.08;
-  for (let y = 0; y < h; y += 3) {
-    const idx = y * w * 4;
-    for (let x = 0; x < w * 4; x += 4) {
-      data[idx + x] = Math.min(255, data[idx + x] + scanlineStrength * 30);
-      data[idx + x + 1] = Math.max(0, data[idx + x + 1] - scanlineStrength * 20);
-      data[idx + x + 2] = Math.max(0, data[idx + x + 2] - scanlineStrength * 10);
+  if (strength > 0.01) {
+    // Film grain
+    const grainCount = Math.floor(strength * w * h * 0.0015);
+    for (let i = 0; i < grainCount; i++) {
+      const gx = Math.random() * w;
+      const gy = Math.random() * h;
+      ctx.fillStyle = `rgba(255,255,255,${strength * 0.015 * Math.random()})`;
+      ctx.fillRect(gx, gy, 1 + Math.random() * 2, 1);
     }
+
+    // Scanlines
+    ctx.fillStyle = `rgba(0,0,0,${strength * 0.025})`;
+    for (let y = 0; y < h; y += 3) {
+      ctx.fillRect(0, y, w, 1);
+    }
+
+    // Vignette
+    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.7);
+    vg.addColorStop(0, "transparent");
+    vg.addColorStop(1, `rgba(0,0,0,${strength * 0.35})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, w, h);
   }
 
-  // Occasional horizontal tear
-  const tearProb = intensity * 0.003;
-  if (Math.random() < tearProb) {
-    const tearY = Math.floor(Math.random() * h);
-    const tearH = 2 + Math.floor(Math.random() * 6);
-    const offset = Math.floor((Math.random() - 0.5) * 40);
-    for (let row = tearY; row < Math.min(h, tearY + tearH); row++) {
-      const rowIdx = row * w * 4;
-      const shiftedRowIdx = row * w * 4 + offset * 4;
-      if (shiftedRowIdx >= 0 && shiftedRowIdx + w * 4 < data.length) {
-        const copy = data.slice(rowIdx, rowIdx + w * 4);
-        data.set(data.slice(shiftedRowIdx, shiftedRowIdx + w * 4), rowIdx);
-        data.set(copy, shiftedRowIdx);
+  // — Corruption Events (timed bursts, independent of vhs but scaled by it) —
+  if (strength < 0.01) return;
+
+  corrupt.timer += 1 / 60;
+
+  // Schedule next glitch
+  if (!corrupt.isGlitching && corrupt.timer > corrupt.nextGlitch) {
+    corrupt.isGlitching = true;
+    corrupt.glitchTimer = 0;
+    corrupt.tearX = (Math.random() - 0.5) * 40;
+    const isStrong = Math.random() < 0.25;
+    corrupt.nextGlitch = 5 + Math.random() * (isStrong ? 40 : 10);
+    if (strength > 0.5) corrupt.nextGlitch *= 0.6;
+    corrupt.timer = 0;
+  }
+
+  if (corrupt.isGlitching) {
+    corrupt.glitchTimer += 1 / 60;
+    const duration = 0.05 + Math.random() * 0.15;
+
+    if (corrupt.glitchTimer < duration) {
+      const intensity = strength * corrupt.glitchTimer * 10;
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+
+      // Horizontal tracking shift
+      const bandY = Math.random() * h;
+      const bandH = 2 + Math.random() * 8;
+      const offset = corrupt.tearX * (0.5 + Math.random() * 0.5);
+
+      for (let row = bandY; row < Math.min(h, bandY + bandH); row++) {
+        const rowStart = row * w * 4;
+        const shift = rowStart + offset * 4;
+        if (shift >= 0 && shift + w * 4 < data.length) {
+          const copy = data.slice(rowStart, rowStart + w * 4);
+          data.set(data.slice(shift, shift + w * 4), rowStart);
+          data.set(copy, shift);
+        }
       }
-    }
-  }
 
-  // Subtle RGB split on edges
-  const splitStrength = intensity * 0.3;
-  if (splitStrength > 0.1) {
-    const splitY = Math.floor(Math.random() * h);
-    const splitH = 1 + Math.floor(Math.random() * 3);
-    for (let row = splitY; row < Math.min(h, splitY + splitH); row++) {
-      const rowStart = row * w * 4;
-      for (let col = 0; col < w * 4; col += 4) {
-        const idx2 = rowStart + col;
-        data[idx2] = Math.min(255, data[idx2] + splitStrength * 20);
-        data[idx2 + 1] = Math.max(0, data[idx2 + 1] - splitStrength * 15);
+      // RGB channel offset on the band
+      if (strength > 0.3) {
+        for (let row = bandY; row < Math.min(h, bandY + bandH); row++) {
+          const rowStart = row * w * 4;
+          for (let col = 0; col < w * 4; col += 4) {
+            data[rowStart + col] = Math.min(255, data[rowStart + col] + intensity * 15);
+            data[rowStart + col + 1] = Math.max(0, data[rowStart + col + 1] - intensity * 10);
+          }
+        }
       }
+
+      // Noise burst overlay
+      if (strength > 0.4 && Math.random() < 0.3) {
+        const burstCount = Math.floor(strength * 50);
+        for (let i = 0; i < burstCount; i++) {
+          const bx = Math.random() * w;
+          const by = Math.random() * h;
+          data[Math.floor(by) * w * 4 + Math.floor(bx) * 4] = 255;
+          data[Math.floor(by) * w * 4 + Math.floor(bx) * 4 + 1] = 255;
+          data[Math.floor(by) * w * 4 + Math.floor(bx) * 4 + 2] = 255;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+
+      // Brightness flicker
+      if (Math.random() < 0.2) {
+        ctx.fillStyle = `rgba(255,255,255,${intensity * 0.03})`;
+        ctx.fillRect(0, 0, w, h);
+      }
+    } else {
+      corrupt.isGlitching = false;
+      corrupt.timer = 0;
     }
   }
-
-  ctx.putImageData(imageData, 0, 0);
-
-  // Analog shimmer overlay
-  ctx.fillStyle = `rgba(255,255,255,${intensity * 0.015})`;
-  ctx.fillRect(Math.random() * w * 0.5, 0, w * 0.5, h);
 }
 
 /* ── Membrane ── */

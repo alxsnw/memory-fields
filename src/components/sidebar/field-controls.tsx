@@ -114,6 +114,8 @@ export function FieldControls({
               <FieldSlider label="Randomness" value={scale(visualParams.randomness)} onChange={(v) => onParamChange({ randomness: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ randomness: unscale(v) })} />
             </>
           )}
+          <FieldSlider label="Archive" value={scale(visualParams.vhsAmount)} onChange={(v) => onParamChange({ vhsAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ vhsAmount: unscale(v) })} />
+          <FieldSlider label="Glitch" value={scale(visualParams.glitchAmount)} onChange={(v) => onParamChange({ glitchAmount: unscale(v) })} onLiveChange={(v) => onLiveParamChange?.({ glitchAmount: unscale(v) })} />
         </Section>
 
         {/* Processing - hidden for now */}

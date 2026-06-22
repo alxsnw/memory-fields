@@ -80,6 +80,8 @@ export interface VisualParams {
   detail: number;
   glow: number;
   randomness: number;
+  vhsAmount: number;
+  glitchAmount: number;
   smoothing: boolean;
   smoothingAmount: number;
   coreSize: number;
