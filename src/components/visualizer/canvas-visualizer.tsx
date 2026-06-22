@@ -1683,16 +1683,17 @@ function drawArchiveDecoder(
 
   // Audio envelopes
   const st = __adState;
-  const attack = 0.45, release = 0.035;
-  st.bassEnv += (bass - st.bassEnv) * (bass > st.bassEnv ? attack : release);
-  st.highEnv += (highs - st.highEnv) * (highs > st.highEnv ? attack : 0.08);
-  const kick = Math.max(0, bass - st.prevBass) * 4;
-  st.prevBass += (bass - st.prevBass) * 0.15;
-  const bEnv = Math.max(0.1, st.bassEnv);
+  const attack = 0.5, release = 0.04;
+  st.bassEnv += (bass * 2 - st.bassEnv) * (bass > st.bassEnv ? attack : release);
+  st.highEnv += (highs * 2 - st.highEnv) * (highs > st.highEnv ? attack : 0.1);
+  const kick = Math.max(0, bass - st.prevBass) * 10;
+  st.prevBass += (bass - st.prevBass) * 0.2;
+  const bEnv = Math.max(0.05, st.bassEnv);
   const hEnv = st.highEnv;
-  const distortion = kick * 8;
-  const expansion = bEnv * 8;
-  const corruptProb = Math.min(0.3, hEnv * 0.5 + kick * 0.3);
+  const distortion = Math.min(w * 0.15, kick * 25);
+  const expansion = bEnv * 25;
+  const corruptProb = Math.min(0.6, hEnv + kick * 0.5);
+  const sparkleProb = hEnv * 0.1;
 
   // Setup offscreen canvas
   const oc = __adCanvas;
@@ -1718,14 +1719,13 @@ function drawArchiveDecoder(
       if (i >= noiseLen) break;
       const nx = c / cols, ny = r / rows;
 
-      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 6 * waveInfluence
-                 + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 3;
+      const wave = Math.sin(nx * 20 + __adState.phase * 0.4 * speed) * bEnv * 15
+                 + Math.cos(ny * 15 + __adState.phase * 0.3 * speed) * mids * 6;
 
       // AD2: cluster mode — noise dominates, creating emergent clusters
       let signal: number;
       if (clusterMode) {
         signal = Math.max(0, Math.min(0.99, __adState.noise[i] * noiseInfluence + bEnv * 0.6 + wave * 0.4));
-        // Rewrite: periodically reset noise cells on kick
         if (rewriteMode && kick > 0.8 && __adState.noise[(i * 11) % noiseLen] < kick * 0.3) {
           __adState.noise[i] = Math.random();
         }
@@ -1734,13 +1734,11 @@ function drawArchiveDecoder(
       }
       __adState.noise[i] += (signal - __adState.noise[i]) * (clusterMode ? 0.05 : 0.03);
 
-      const bright = Math.floor(signal * __adChars.length);
-      const char = __adChars[Math.min(bright, __adChars.length - 1)];
+      const char = __adChars[Math.min(Math.floor(signal * __adChars.length), __adChars.length - 1)];
 
-      // Use noise buffer instead of Math.random for corruption/sparkle
       const noiseVal = __adState.noise[(i * 7) % noiseLen];
       const corrupted = corruptProb > 0 && noiseVal < corruptProb;
-      const sparkle = noiseVal > 0.98;
+      const sparkle = sparkleProb > 0 && noiseVal > 1 - sparkleProb;
 
       const gs = baseSize + expansion * signal;
       const distortX = distortion * Math.sin(ny * 10 + kick * 2);
@@ -1748,12 +1746,12 @@ function drawArchiveDecoder(
       const px = c * gs + gs / 2 + distortX;
       const py = r * gs + gs / 2 + distortY;
 
-      let alpha = Math.max(0.06, signal * 0.5 + bEnv * 0.6);
-      if (corrupted) alpha = Math.min(1, alpha + kick * 0.5);
-      if (sparkle) alpha = Math.min(1, alpha + 0.5);
+      let alpha = Math.max(0.04, signal * 0.4 + bEnv * 1.0);
+      if (corrupted) alpha = Math.min(1, alpha + 0.6);
+      if (sparkle) alpha = Math.min(1, alpha + 0.8);
 
       if (sparkle) {
-        octx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`;
+        octx.fillStyle = `rgba(255,255,255,${alpha})`;
       } else {
         const colorIdx = corrupted ? Math.floor(noiseVal * s.palette.length) % s.palette.length : Math.floor(signal * s.palette.length) % s.palette.length;
         octx.fillStyle = s.palette[colorIdx] + Math.floor(alpha * 255).toString(16).padStart(2, "0");
@@ -1762,17 +1760,17 @@ function drawArchiveDecoder(
     }
   }
 
-  // Scanlines on offscreen
-  octx.fillStyle = `rgba(0,0,0,${0.02 + bEnv * 0.03})`;
+  // Scanlines with bass-driven intensity
+  octx.fillStyle = `rgba(0,0,0,${0.03 + bEnv * 0.08})`;
   for (let r = 0; r < rows; r += 2) {
     octx.fillRect(0, r * baseSize, rw, 1);
   }
 
-  // Corruption bands
-  if (corruptProb > 0.05 && __adState.noise[Math.floor((__adState.phase * 31) % noiseLen)] < corruptProb * 0.3) {
+  // Corruption bands — much more active
+  if (corruptProb > 0.05 && __adState.noise[Math.floor((__adState.phase * 31) % noiseLen)] < corruptProb * 0.4) {
     const bandY = Math.random() * rh;
-    const bandH = 2 + Math.random() * 8 + kick * 4;
-    octx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.15})`;
+    const bandH = 2 + Math.random() * 12 + kick * 8;
+    octx.fillStyle = `rgba(255,255,255,${(hEnv + kick) * 0.25})`;
     octx.fillRect(0, bandY, rw, bandH);
   }
 
